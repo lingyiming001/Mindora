@@ -1,0 +1,18 @@
+.DS_Store
+.build/
+.agents/
+Mindora.xcodeproj/
+
+ 
+
+# Local and generated files (project-continuity)
+Thumbs.db
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.*.example
+!.env.*.sample
+
+# Reproducible local release packages
+deploy/*.zip

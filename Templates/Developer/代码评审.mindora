@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "id": "218CDD6A-B6DE-44B6-AB1D-81C278BB5095",
+  "title": "代码评审",
+  "layout": "balanced",
+  "theme": "indigo",
+  "nodes": [
+    {
+      "id": "AB670A5D-88B2-44D0-9976-7562A3208AF6",
+      "title": "代码评审",
+      "children": [
+        {
+          "id": "69AB853B-82B8-4333-948D-08FD7402F833",
+          "title": "变更背景",
+          "children": [
+            {
+              "id": "4EBEAD7F-2CFF-4544-BEA0-F469815C5220",
+              "title": "解决的问题与验收标准",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "12F23C6C-FF6E-4BB5-9A6E-6A7DEB1BC160",
+              "title": "变更范围及关联需求",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "C7A233E9-303D-4A83-B093-AF06F856408E",
+              "title": "方案取舍",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "8798C9E8-1A38-4517-971F-E804B2765B93",
+          "title": "正确性",
+          "children": [
+            {
+              "id": "61A282B3-CBA4-4707-A7B9-E5DEA3BD1391",
+              "title": "核心逻辑与边界条件",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "AAFEE461-5F2C-4A20-AACB-84010FE27487",
+              "title": "错误处理与资源释放",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "F9059336-AFD1-4BB8-96DB-1BA10A26F48F",
+              "title": "并发、事务与幂等",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "73517812-47C6-4C9E-917B-CE682000A706",
+          "title": "设计与质量",
+          "children": [
+            {
+              "id": "666C708C-6CA5-48F6-A0D3-A9A0EC90449C",
+              "title": "职责划分与命名",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "B27F0E0D-6A84-431D-8939-C5B13252D9CF",
+              "title": "重复代码与复杂度",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "1F459BBF-7A95-43C0-9D90-D5CBE46DDA22",
+              "title": "兼容性与可读性",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "77101256-E781-4306-A9C0-7140C30A5825",
+          "title": "安全与性能",
+          "children": [
+            {
+              "id": "085D84B3-5A2D-4F9A-ACDD-5D43E9E7F1B4",
+              "title": "权限、输入校验与敏感数据",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "9D87D782-B259-4716-B7E9-8749FE4C264B",
+              "title": "查询次数、缓存与内存",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "D017B486-1C5C-402E-B25D-F832C1E2B7D6",
+              "title": "依赖与配置风险",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "2502AB63-0839-499F-A869-19E646DEC942",
+          "title": "验证与结论",
+          "children": [
+            {
+              "id": "3FDF9106-7910-4D5F-83DA-C502C0D9E4AB",
+              "title": "测试证据与覆盖缺口",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "9EDACE6B-5FE5-4A5F-AC6F-D1B9E03E146F",
+              "title": "阻塞问题与建议改进",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "78F6A24F-3E58-4A33-A662-9E0C9AA8F519",
+              "title": "合并条件及跟进人",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        }
+      ],
+      "isCollapsed": false,
+      "note": "",
+      "tags": [],
+      "priority": 0
+    }
+  ]
+}

@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "id": "37AD45A3-D14D-4DD5-85C5-32C28C59B47F",
+  "title": "系统设计",
+  "layout": "balanced",
+  "theme": "indigo",
+  "nodes": [
+    {
+      "id": "E820FB0B-0A8C-4B56-BAFB-D645001E1616",
+      "title": "系统设计",
+      "children": [
+        {
+          "id": "4603735B-F3A1-4AF0-BA75-B4252C1C9532",
+          "title": "需求与约束",
+          "children": [
+            {
+              "id": "8688C72A-AA75-4E80-B987-0BA29963C1BD",
+              "title": "核心场景与非目标",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "C97D825B-28A7-49F9-ABB1-B0161B346554",
+              "title": "容量、延迟与可用性目标",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "57AEBDAF-B702-4274-8659-C839F6BEDDF9",
+              "title": "预算与合规约束",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "6C4C5171-83AC-4F2A-AB0D-59A8285F69C2",
+          "title": "模块与边界",
+          "children": [
+            {
+              "id": "FBAAB20B-2754-46E8-B891-86D6CCEC7197",
+              "title": "客户端与接入层",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "1A5AC043-E5A3-4700-B0CC-530B93850058",
+              "title": "领域服务与责任划分",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "919869A1-011E-4D78-A958-9123EA6A526C",
+              "title": "外部依赖与接口契约",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "CA131FA0-7ECF-4C39-B170-37283E4FAC79",
+          "title": "数据与通信",
+          "children": [
+            {
+              "id": "8E79EE44-08F4-4488-BC0D-764D1F8218B8",
+              "title": "数据模型与存储选型",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "6498EC7D-5C7B-4960-AF37-ADD6E85BE669",
+              "title": "同步调用与异步消息",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "295461D3-3055-49FD-9F56-85BDEEA67DDF",
+              "title": "缓存、一致性与幂等",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "0182806D-06A2-4F52-BC10-A8E5D4E83B2C",
+          "title": "可靠性与安全",
+          "children": [
+            {
+              "id": "0B023DFA-6750-4FC6-BA2E-1A3C2F9F1E47",
+              "title": "鉴权与权限边界",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "7CFEE946-AB2F-429A-BE70-04081BC2AE14",
+              "title": "超时、重试与降级",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "594A80E4-D1C9-4BC0-BCBB-69BEB6123E69",
+              "title": "监控、告警与灾备",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "53591050-AEE7-450A-8A3C-FFF095D8B9A7",
+          "title": "方案与演进",
+          "children": [
+            {
+              "id": "0730E277-D9C3-407F-A4C5-121AA65663C3",
+              "title": "候选方案及取舍",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "19959330-AF25-4491-9C0A-E34328DC9174",
+              "title": "待验证假设",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "2FBE3B89-E737-4AD8-8D2D-1564F8DB7808",
+              "title": "里程碑与迁移路径",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        }
+      ],
+      "isCollapsed": false,
+      "note": "",
+      "tags": [],
+      "priority": 0
+    }
+  ]
+}

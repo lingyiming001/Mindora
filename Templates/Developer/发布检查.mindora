@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "id": "9B5C504D-ECFA-4D1E-B76C-FA3CCC2A6FDA",
+  "title": "发布检查",
+  "layout": "balanced",
+  "theme": "indigo",
+  "nodes": [
+    {
+      "id": "A7B37355-C2A1-416D-98AF-E17F3A78201B",
+      "title": "发布检查",
+      "children": [
+        {
+          "id": "B11ABB5B-7F58-426B-B946-B2385652BD39",
+          "title": "发布范围",
+          "children": [
+            {
+              "id": "F6EBC736-9C2E-497F-B77A-55212C81F444",
+              "title": "版本号与变更清单",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "51CF8E9F-C6FD-41AF-AD19-CEE099A922E7",
+              "title": "负责人及发布时间",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "818686A8-DFF8-4B6B-B196-2A47446818BD",
+              "title": "影响服务与用户",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "75D58DA0-6BD5-4637-85C0-A231ABDAAC88",
+          "title": "上线准备",
+          "children": [
+            {
+              "id": "EB3B2A6F-E94C-4039-AADB-F91516691877",
+              "title": "构建产物与配置核对",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "E2C9B76B-A347-4F96-BD09-B28662805F26",
+              "title": "数据迁移及备份",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "765B32E3-4F17-41FD-A534-BE45D01A37C5",
+              "title": "权限、依赖与兼容检查",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "96B5FF1B-A45E-4027-A10B-84CC5E2791B2",
+          "title": "质量门禁",
+          "children": [
+            {
+              "id": "53B65504-03DD-4157-8FA0-4B3E4A3E584F",
+              "title": "核心流程与回归结果",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "34468015-0F17-4F29-82AE-47EF846AA7DF",
+              "title": "性能及安全检查",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "352F00EE-461F-493B-B6B6-2C8C659C7E37",
+              "title": "未解决问题与风险接受",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "3054998E-6CAE-47BA-9636-38163C2296D6",
+          "title": "执行与观察",
+          "children": [
+            {
+              "id": "87769DDA-E178-4273-ABA4-47140C40F6A7",
+              "title": "灰度范围及操作步骤",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "DA20E851-03C4-4A9E-9986-FED34A0C2EB3",
+              "title": "成功指标与告警阈值",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "3A23907F-9559-4126-AEF0-E8606E2F1D40",
+              "title": "日志、指标与值班人",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "0FB3FA29-6733-4243-A730-0601C6C4E36B",
+          "title": "回滚与收尾",
+          "children": [
+            {
+              "id": "6DAC06F0-0EC0-4AD4-AE57-E785C6B0C3B8",
+              "title": "回滚触发条件",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "06A10206-8308-40CD-9DC7-7FAC5D7B283E",
+              "title": "回滚步骤与数据恢复",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "FC9343ED-FCBF-4311-981A-35FE0F9FCE2B",
+              "title": "发布公告与复盘记录",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        }
+      ],
+      "isCollapsed": false,
+      "note": "",
+      "tags": [],
+      "priority": 0
+    }
+  ]
+}

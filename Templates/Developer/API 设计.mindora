@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "id": "1440275A-2731-4225-B7DA-BDEE59AE9BEA",
+  "title": "API 设计",
+  "layout": "balanced",
+  "theme": "indigo",
+  "nodes": [
+    {
+      "id": "82AAABA6-54B0-4186-B8A3-ED93283837B4",
+      "title": "API 设计",
+      "children": [
+        {
+          "id": "0E386E5A-6F94-4A37-98DF-6C7FED0A0C19",
+          "title": "业务场景",
+          "children": [
+            {
+              "id": "949CEB48-4CBB-424F-8387-98507011B3AB",
+              "title": "调用方与使用目的",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "CB1400F7-1EF8-461A-9970-B779D0890537",
+              "title": "资源与操作边界",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "16169FFC-A5A6-4397-A2CC-46DE309BBA7F",
+              "title": "前置条件与权限",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "0154865D-7505-4928-BDB7-A4E278653CEF",
+          "title": "请求契约",
+          "children": [
+            {
+              "id": "27056781-1082-4734-922E-4D4CE3FA576B",
+              "title": "路径与 HTTP 方法",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "2EB6FFF5-307C-42B3-8567-693D34450FCD",
+              "title": "参数、类型与校验",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "E38D0567-86ED-464B-B230-CE9A27E8F76F",
+              "title": "认证头与幂等键",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "7FF55422-5B10-4A73-BB15-29CB581AEF86",
+          "title": "响应契约",
+          "children": [
+            {
+              "id": "68DD71A0-93F1-4EB5-8266-33F6034B395D",
+              "title": "成功响应示例",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "0D1C0B5C-C6A0-4BD4-97BD-4DA8B3A6B61A",
+              "title": "状态码与错误结构",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "FA781DB8-696D-49BF-8EF3-B1AAD676514F",
+              "title": "分页、排序与过滤",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "67EADF67-9DF0-4A35-8C9B-62350B64E8A3",
+          "title": "安全与兼容",
+          "children": [
+            {
+              "id": "447B8DBF-447E-4288-8618-DEB9E200793E",
+              "title": "限流与敏感字段",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "FAACD843-7E41-402A-9673-0730BF22EA29",
+              "title": "版本策略与弃用计划",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "11BD4876-2C72-4167-971D-7C43693EFE7A",
+              "title": "超时、重试与并发控制",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "71953195-CAD6-4767-A68A-D1E05CD24593",
+          "title": "交付与验证",
+          "children": [
+            {
+              "id": "C13AB994-3657-465B-8DB4-C1BE76EA7719",
+              "title": "接口文档与 Mock",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "C8376F45-E7D6-4FC8-BDCE-6D828C268F7C",
+              "title": "契约测试与边界用例",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "2F536792-B8B1-47A2-BA0F-427A28E3BD01",
+              "title": "联调负责人及验收标准",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        }
+      ],
+      "isCollapsed": false,
+      "note": "",
+      "tags": [],
+      "priority": 0
+    }
+  ]
+}

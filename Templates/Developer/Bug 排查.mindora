@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "id": "1B42332F-30AD-4E22-8DD5-D2C570228114",
+  "title": "Bug 排查",
+  "layout": "balanced",
+  "theme": "indigo",
+  "nodes": [
+    {
+      "id": "8029439D-B38A-4FE7-BCA4-7750BA24ECB5",
+      "title": "Bug 排查",
+      "children": [
+        {
+          "id": "F28BAE69-D9C8-4A82-8245-70062E1E5E15",
+          "title": "问题现象",
+          "children": [
+            {
+              "id": "1A05F551-599F-446A-A6D9-88BB2399321A",
+              "title": "预期与实际结果",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "F2B6C49F-7047-4F0E-AAC1-DF7821633C43",
+              "title": "影响范围与严重程度",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "E9E30F0A-A5AD-4AAF-87AA-5B6C0CA3A406",
+              "title": "首次出现时间与版本",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "7C1B382B-C47A-4365-A390-7A931EA81D25",
+          "title": "稳定复现",
+          "children": [
+            {
+              "id": "08CA9E90-35EE-451A-B333-A61D7F8E62EE",
+              "title": "最小复现步骤",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "B7E173DC-DDBC-40C2-9DBF-8921AE3A67B6",
+              "title": "输入数据与环境",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "B130C23B-7BD4-492A-AD57-6744CEA690F1",
+              "title": "发生频率与触发条件",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "D24B066F-3CB7-4D62-AEA7-A939A31E80A6",
+          "title": "证据与假设",
+          "children": [
+            {
+              "id": "A2C00F43-B885-4A07-A58A-CDF3B30D1ED2",
+              "title": "日志、调用栈与请求 ID",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "CAE96F62-C7D5-444A-B73F-132689B43086",
+              "title": "最近代码或配置变更",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "6443E3EA-E640-4A9F-A95E-85A18FF91590",
+              "title": "候选根因与排除证据",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "64C5C95C-B51D-4915-904F-2C005EDB218D",
+          "title": "修复方案",
+          "children": [
+            {
+              "id": "62D0200A-FF18-466A-A244-62AC184EDEA5",
+              "title": "最小修复与风险",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "883E52A8-FD56-495F-B613-3AE7B20AFAF9",
+              "title": "临时缓解与回滚方式",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "83669AFA-8F37-491A-9566-6D7FBD68E189",
+              "title": "根因说明",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        },
+        {
+          "id": "CA172E3A-093F-461B-9E83-05D86870A307",
+          "title": "回归与复盘",
+          "children": [
+            {
+              "id": "BE63CD00-F303-43A9-88AD-A4261F040176",
+              "title": "复现用例与边界验证",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "EA74414F-EF22-416F-9B51-F73A8CE919A6",
+              "title": "关联功能回归",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            },
+            {
+              "id": "18F06FF5-6CA3-45DE-A2A4-B1C77FE71F1D",
+              "title": "监控观察与预防措施",
+              "children": [],
+              "isCollapsed": false,
+              "note": "",
+              "tags": [],
+              "priority": 0
+            }
+          ],
+          "isCollapsed": false,
+          "note": "",
+          "tags": [],
+          "priority": 0
+        }
+      ],
+      "isCollapsed": false,
+      "note": "",
+      "tags": [],
+      "priority": 0
+    }
+  ]
+}

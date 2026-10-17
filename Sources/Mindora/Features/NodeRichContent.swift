@@ -71,7 +71,7 @@ struct NodeRichContent: View {
               let host = parts.host, !host.isEmpty, let url = parts.url else { return nil }
         return url
     }
-    private func importAttachments(imagesOnly: Bool) {
+    func importAttachments(imagesOnly: Bool) {
         let panel = NSOpenPanel()
         panel.title = imagesOnly ? "添加图片到当前主题" : "添加文件到当前主题"
         panel.allowedContentTypes = imagesOnly ? [.image] : [.item]
@@ -99,7 +99,7 @@ struct NodeRichContent: View {
             model.updateNode(nodeID) { $0.attachments.append(contentsOf: incoming) }
         } catch { model.errorMessage = "无法添加附件：\(error.localizedDescription)" }
     }
-    private func exportAttachment(_ attachment: NodeAttachment) {
+    func exportAttachment(_ attachment: NodeAttachment) {
         let panel = NSSavePanel()
         panel.title = "导出附件"; panel.nameFieldStringValue = attachment.name
         guard panel.runModal() == .OK, let url = panel.url else { return }

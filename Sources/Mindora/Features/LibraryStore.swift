@@ -46,6 +46,9 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
     @Published private(set) var favoritePaths: Set<String>
     private var scopedURL: URL?
     private var reloadPending = false
+    private var reloadTask: Task<Void, Never>?
+    private var scanTask: Task<[LibraryItem], Error>?
+    private var isSuspended = false
     private var folderIndex: [URL: [LibraryItem]] = [:]
     private var watcher: DispatchSourceFileSystemObject?
     private var activationObserver: AnyCancellable?
@@ -63,7 +66,7 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
         favoritePaths.sorted().map { rootURL.appendingPathComponent($0) }.filter { FileManager.default.fileExists(atPath: $0.path) && !BackupStore.contains($0, in: BackupStore.shared.folderURL) }
     }
     var recentURLs: [URL] {
-        Array(NSDocumentController.shared.recentDocumentURLs.filter { $0.pathExtension.lowercased() == "mindora" && FileManager.default.fileExists(atPath: $0.path) && !BackupStore.contains($0, in: BackupStore.shared.folderURL) }.prefix(6))
+        Array(NSDocumentController.shared.recentDocumentURLs.filter { contains($0) && $0.pathExtension.lowercased() == "mindora" && FileManager.default.fileExists(atPath: $0.path) && !BackupStore.contains($0, in: BackupStore.shared.folderURL) }.prefix(6))
     }
     var totalMaps: Int { items.reduce(0) { $0 + $1.totalMaps } }
 
@@ -83,11 +86,12 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
             }
         }
         rootURL = restored; currentFolderURL = restored; scopedURL = scope
-        favoritePaths = Set(UserDefaults.standard.stringArray(forKey: "Mindora.LibraryFavorites") ?? [])
+        favoritePaths = Set(UserDefaults.standard.stringArray(forKey: "Mindora.LibraryFavorites." + restored.path) ?? UserDefaults.standard.stringArray(forKey: "Mindora.LibraryFavorites") ?? [])
         do { try manager.createDirectory(at: restored, withIntermediateDirectories: true) }
         catch { errorMessage = "无法打开资料库：\(error.localizedDescription)。可使用“选择资料库位置”重新指定文件夹。" }
         activationObserver = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in Task { @MainActor in self?.reload() } }
+        WorkspaceCatalog.shared.register(restored, bookmark: UserDefaults.standard.data(forKey: bookmarkKey))
         watchRoot(); reload()
     }
     func contains(_ url: URL) -> Bool {
@@ -96,18 +100,21 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
         return path == root || path.hasPrefix(root + "/")
     }
     func reload() {
+        guard !isSuspended else { return }
         // One scan at a time. Bursts coalesce into one follow-up scan.
         guard !isLoading else { reloadPending = true; return }
         isLoading = true
-        Task {
+        reloadTask = Task {
             repeat {
                 reloadPending = false
                 let root = rootURL, backupFolder = BackupStore.shared.folderURL
                 do {
                     try await Task.sleep(for: .milliseconds(120))
-                    let result = try await Task.detached(priority: .utility) {
-                        try Self.scan(root, excluding: backupFolder)
-                    }.value
+                    let worker = Task.detached(priority: .utility) { try Self.scan(root, excluding: backupFolder) }
+                    scanTask = worker
+                    let result = try await worker.value
+                    guard !Task.isCancelled else { return }
+                    scanTask = nil
                     guard root == rootURL, backupFolder == BackupStore.shared.folderURL else {
                         reloadPending = true; continue
                     }
@@ -125,12 +132,25 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
                     if index[currentFolderURL] == nil { currentFolderURL = rootURL }
                     if let selectedItemURL, !Self.hasItem(selectedItemURL, in: result) { self.selectedItemURL = nil }
                 } catch {
+                    guard !Task.isCancelled else { return }
+                    scanTask = nil
                     if root == rootURL { errorMessage = "无法读取资料库：\(error.localizedDescription)" }
                     else { reloadPending = true }
                 }
             } while reloadPending
-            isLoading = false
+            isLoading = false; reloadTask = nil
         }
+    }
+    func suspendBackgroundActivity() {
+        isSuspended = true
+        reloadTask?.cancel(); reloadTask = nil
+        scanTask?.cancel(); scanTask = nil
+        reloadPending = false; isLoading = false
+        watcher?.cancel(); watcher = nil
+    }
+    func resumeBackgroundActivity() {
+        guard isSuspended else { return }
+        isSuspended = false; watchRoot(); reload()
     }
     private static func hasItem(_ url: URL, in entries: [LibraryItem]) -> Bool {
         entries.contains { $0.url == url || hasItem(url, in: $0.children) }
@@ -142,10 +162,12 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
     }
     func selectItem(_ url: URL) { selectedItemURL = url }
     private nonisolated static func scan(_ root: URL, excluding backupFolder: URL, depth: Int = 0) throws -> [LibraryItem] {
+        try Task.checkCancellation()
         guard depth < 64, !BackupStore.contains(root, in: backupFolder) else { return [] }
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .isRegularFileKey]
         let urls = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])
         return try urls.compactMap { url in
+            try Task.checkCancellation()
             guard !BackupStore.contains(url, in: backupFolder) else { return nil }
             let values = try url.resourceValues(forKeys: keys)
             guard values.isSymbolicLink != true else { return nil }
@@ -161,6 +183,7 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
     }
     private func watchRoot() {
         watcher?.cancel(); watcher = nil
+        guard !isSuspended else { return }
         let descriptor = Darwin.open(rootURL.path, O_EVTONLY)
         guard descriptor >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor, eventMask: [.write, .rename, .delete], queue: .main)
@@ -181,13 +204,63 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
         }
         do {
             let bookmark = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-            guard WorkspaceStore.shared.showFolder() else { return }
-            _ = url.startAccessingSecurityScopedResource()
-            scopedURL?.stopAccessingSecurityScopedResource(); scopedURL = url
-            UserDefaults.standard.set(bookmark, forKey: bookmarkKey)
-            rootURL = url; recycledItems = []; recycleNotice = ""; currentFolderURL = url; expandedFolders = []; favoritePaths = []
-            saveFavorites(); watchRoot(); reload()
+            if let existing = WorkspaceCatalog.shared.current(url) { _ = switchWorkspace(existing); return }
+            guard !WorkspaceCatalog.shared.overlaps(url) else { errorMessage = "工作空间目录不能相互包含。"; return }
+            guard activateWorkspaceFolder(url, bookmark: bookmark) else { return }
+            WorkspaceCatalog.shared.register(url, bookmark: bookmark)
         } catch { errorMessage = "无法使用这个位置：\(error.localizedDescription)" }
+    }
+    @discardableResult private func activateWorkspaceFolder(_ url: URL, bookmark: Data) -> Bool {
+        guard !BackupStore.contains(url, in: BackupStore.shared.folderURL),
+              (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { errorMessage = "空间位置不可用，请检查文件夹和访问权限。"; return false }
+        guard WorkspaceStore.shared.showFolder() else { return false }
+        saveFavorites()
+        let accessed = url.startAccessingSecurityScopedResource()
+        scopedURL?.stopAccessingSecurityScopedResource(); scopedURL = accessed ? url : nil
+        UserDefaults.standard.set(bookmark, forKey: bookmarkKey)
+        rootURL = url; currentFolderURL = url; selectedItemURL = nil
+        recycledItems = []; recycleNotice = ""; expandedFolders = []; searchText = ""
+        items = []; folderIndex = [:]; filteredItems = []
+        favoritePaths = Set(UserDefaults.standard.stringArray(forKey: favoritesKey + "." + url.path) ?? [])
+        saveFavorites(); watchRoot(); reload()
+        return true
+    }
+    @discardableResult func switchWorkspace(_ workspace: LibraryWorkspace) -> Bool {
+        do {
+            let url = try workspace.resolve()
+            if url.standardizedFileURL == rootURL.standardizedFileURL { return true }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            let bookmark = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+            guard activateWorkspaceFolder(url, bookmark: bookmark) else { return false }
+            WorkspaceCatalog.shared.register(url, bookmark: bookmark)
+            return true
+        } catch { errorMessage = "无法切换工作空间：\(error.localizedDescription)"; return false }
+    }
+    func moveToWorkspace(_ item: LibraryItem, workspace: LibraryWorkspace) {
+        guard contains(item.url), item.url != rootURL else { return }
+        do {
+            let targetRoot = try workspace.resolve()
+            guard !BackupStore.contains(targetRoot, in: rootURL), !BackupStore.contains(rootURL, in: targetRoot),
+                  !BackupStore.contains(targetRoot, in: BackupStore.shared.folderURL) else { throw LibraryError.invalidLocation }
+            if let active = WorkspaceStore.shared.fileURL, BackupStore.contains(active, in: item.url) {
+                guard WorkspaceStore.shared.showFolder() else { return }
+            }
+            guard !hasOpenDocuments(inside: item.url) else { throw LibraryError.openFolder }
+            let accessed = targetRoot.startAccessingSecurityScopedResource()
+            defer { if accessed { targetRoot.stopAccessingSecurityScopedResource() } }
+            guard (try targetRoot.resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true else { throw LibraryError.invalidLocation }
+            var destination = targetRoot.appendingPathComponent(item.url.lastPathComponent, isDirectory: item.isFolder)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                destination = uniqueURL(name: item.name + " 移入", fileExtension: item.isFolder ? nil : item.url.pathExtension, folder: targetRoot)
+            }
+            try FileManager.default.moveItem(at: item.url, to: destination)
+            let prefix = relativePath(item.url)
+            favoritePaths = favoritePaths.filter { $0 != prefix && !$0.hasPrefix(prefix + "/") }
+            if selectedItemURL == item.url { selectedItemURL = nil }
+            if BackupStore.contains(currentFolderURL, in: item.url) { currentFolderURL = rootURL }
+            saveFavorites(); reload()
+        } catch { errorMessage = "无法完成跨空间移动，请检查原位置和目标空间：\(error.localizedDescription)" }
     }
     func selectFolder(_ url: URL) {
         guard contains(url) else { return }
@@ -440,7 +513,7 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
         let path = url.standardizedFileURL.path
         return path.hasPrefix(base) ? String(path.dropFirst(base.count)) : ""
     }
-    private func saveFavorites() { UserDefaults.standard.set(Array(favoritePaths), forKey: favoritesKey) }
+    private func saveFavorites() { UserDefaults.standard.set(Array(favoritePaths), forKey: favoritesKey + "." + rootURL.path) }
     private func uniqueURL(name: String, fileExtension: String?, folder: URL) -> URL {
         var index = 1
         while true {

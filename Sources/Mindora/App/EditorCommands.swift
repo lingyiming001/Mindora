@@ -57,6 +57,10 @@ struct EditorCommands: Commands {
                 }
             }.disabled(model == nil)
         }
+        CommandMenu("AI") {
+            Button("打开 AI 助手") { WorkspaceStore.shared.showWorkspaceWindow(); openWindow(id: "ai-assistant") }.keyboardShortcut("a", modifiers: [.command, .shift])
+            Button("停止 AI 请求") { AIAssistantStore.shared.stop() }
+        }
         CommandMenu("插入") {
             Button("网址链接…") { model?.insertContent(.link) }.keyboardShortcut("k", modifiers: [.command, .option]).disabled(model?.selectedID == nil)
             Button("代码块…") { model?.insertContent(.code) }.keyboardShortcut("c", modifiers: [.command, .option]).disabled(model?.selectedID == nil)

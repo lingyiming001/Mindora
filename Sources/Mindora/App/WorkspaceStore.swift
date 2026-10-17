@@ -16,13 +16,17 @@ import UniformTypeIdentifiers
     private var scopedURL: URL?
     private weak var window: NSWindow?
     private var windowDelegate: WorkspaceWindowDelegate?
+    private var isClosingWindows = false
     private let library = LibraryStore.shared
 
     private init() {}
 
     func attach(to window: NSWindow) {
+        guard !isClosingWindows else { return }
         guard self.window !== window else { updateWindow(); return }
         self.window = window
+        PanelActivityStore.shared.resume()
+        library.resumeBackgroundActivity()
         let delegate = WorkspaceWindowDelegate(workspace: self, original: window.delegate)
         windowDelegate = delegate; window.delegate = delegate
         updateWindow()
@@ -32,7 +36,14 @@ import UniformTypeIdentifiers
         window?.representedURL = fileURL
         window?.isDocumentEdited = document?.isDocumentEdited ?? false
     }
+    func reopenWorkspace() {
+        guard showFolder() else { return }
+        activateWindow()
+    }
+    func showWorkspaceWindow() { activateWindow() }
     private func activateWindow() {
+        PanelActivityStore.shared.resume()
+        library.resumeBackgroundActivity()
         presentWorkspace?()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -196,6 +207,31 @@ import UniformTypeIdentifiers
         document?.close(); document = nil
         scopedURL?.stopAccessingSecurityScopedResource(); scopedURL = nil
     }
+    func mainWindowWillClose(_ mainWindow: NSWindow) {
+        guard window === mainWindow, !isClosingWindows else { return }
+        isClosingWindows = true
+        defer { isClosingWindows = false }
+        PanelActivityStore.shared.cancelAll()
+        library.suspendBackgroundActivity()
+        editor?.showsTemplates = false; editor?.showsCommandPalette = false; editor?.contentInsertion = nil
+        NotificationCenter.default.post(name: .mindoraMainWindowDidClose, object: nil)
+        if NSApp.modalWindow != nil { NSApp.abortModal() }
+        func dismissSheets(of parent: NSWindow) {
+            if let sheet = parent.attachedSheet {
+                dismissSheets(of: sheet)
+                parent.endSheet(sheet, returnCode: .cancel)
+                sheet.orderOut(nil)
+            }
+        }
+        dismissSheets(of: mainWindow)
+        for other in NSApp.windows where other !== mainWindow && (other.isVisible || other.isMiniaturized || other.attachedSheet != nil) {
+            dismissSheets(of: other)
+            other.close()
+        }
+        closeActiveDocument()
+        editor = nil; fileURL = nil; saveStatus = ""; sessionID = UUID()
+        library.activeDocumentURL = nil
+    }
     func canCloseWindow() -> Bool {
         do { try saveActive(); return true }
         catch { errorMessage = "当前导图尚未保存：\(error.localizedDescription)"; return false }
@@ -211,6 +247,10 @@ import UniformTypeIdentifiers
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard workspace?.canCloseWindow() != false else { return false }
         return original?.windowShouldClose?(sender) ?? true
+    }
+    func windowWillClose(_ notification: Notification) {
+        if let window = notification.object as? NSWindow { workspace?.mainWindowWillClose(window) }
+        original?.windowWillClose?(notification)
     }
     override func responds(to selector: Selector!) -> Bool {
         super.responds(to: selector) || original?.responds(to: selector) == true

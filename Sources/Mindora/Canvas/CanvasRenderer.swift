@@ -32,7 +32,7 @@ struct CanvasRenderer {
     }
     static func draw(document: MindMapDocument, layout: LayoutResult, palette: MapPalette,
                      visibleRect: CGRect? = nil, selectedIDs: Set<UUID> = [], dropTarget: UUID? = nil,
-                     scale: CGFloat = 1, drawControls: Bool = true) {
+                     scale: CGFloat = 1, drawControls: Bool = true, editingNodeID: UUID? = nil) {
         let colors = layout.colors.isEmpty ? colors(for: document) : layout.colors
         for (from, to) in layout.edges {
             guard let a = layout.frames[from], let b = layout.frames[to],
@@ -53,16 +53,18 @@ struct CanvasRenderer {
             NSGraphicsContext.restoreGraphicsState()
             (selected || targeted ? color : color.withAlphaComponent(palette.dark ? 0.5 : 0.19)).setStroke()
             shape.lineWidth = CGFloat(selected || targeted ? max(2, node.style?.borderWidth ?? 1) : node.style?.borderWidth ?? 1) / max(scale, 0.15); if shape.lineWidth > 0 { shape.stroke() }
-            if selected {
+            if selected, editingNodeID != node.id {
                 let ring = NSBezierPath(roundedRect: frame.insetBy(dx: -4 / scale, dy: -4 / scale), xRadius: 15, yRadius: 15)
                 color.withAlphaComponent(0.16).setStroke(); ring.lineWidth = 3 / scale; ring.stroke()
             }
             let font = LayoutEngine.font(node, isRoot: root)
-            let textColor: NSColor = node.style?.textColorHex.flatMap(NSColor.init(hex:)) ?? (root ? .white : palette.text)
+            let textColor = titleTextColor(node, isRoot: root, palette: palette)
             let paragraph = NSMutableParagraphStyle(); paragraph.alignment = (node.style?.textAlignment ?? .center).appKit; paragraph.lineBreakMode = .byCharWrapping
             let hasMetadata = node.priority > 0 || node.progress != nil || !node.tags.isEmpty || !node.note.isEmpty 
-            let textRect = CGRect(x: frame.minX + 17, y: frame.minY + 12, width: frame.width - 34, height: LayoutEngine.titleSize(node, isRoot: root).height - 24 - (hasMetadata ? 19 : 0))
-            ((node.title.isEmpty ? "无标题" : node.title) as NSString).draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font, .foregroundColor: textColor, .paragraphStyle: paragraph])
+            let textRect = titleTextRect(node, frame: frame, isRoot: root)
+            if editingNodeID != node.id {
+                ((node.title.isEmpty ? "无标题" : node.title) as NSString).draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font, .foregroundColor: textColor, .paragraphStyle: paragraph])
+            }
             if hasMetadata {
                 var labels: [String] = []
                 if node.priority > 0 { labels.append("P\(node.priority)") }
@@ -72,7 +74,7 @@ struct CanvasRenderer {
                 (labels.joined(separator: "  ·  ") as NSString).draw(in: CGRect(x: frame.minX + 14, y: frame.minY + LayoutEngine.titleSize(node, isRoot: root).height - 24, width: frame.width - 28, height: 16), withAttributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: root ? textColor.withAlphaComponent(0.8) : palette.secondary, .paragraphStyle: paragraph])
             }
             NodeContentLayout.draw(node, frame: frame, isRoot: root, palette: palette, controls: drawControls)
-            if drawControls, selected {
+            if drawControls, selected, editingNodeID != node.id {
                 let add = addChildRect(frame, scale: scale, left: !root && frame.midX < (layout.frames[document.root.id]?.midX ?? 0))
                 palette.surface.setFill(); NSBezierPath(ovalIn: add).fill()
                 color.setStroke(); let outline = NSBezierPath(ovalIn: add); outline.lineWidth = 1 / scale; outline.stroke()
@@ -99,6 +101,14 @@ struct CanvasRenderer {
                 color.setStroke(); mark.lineWidth = 1.3; mark.stroke()
             }
         }
+    }
+    static func titleTextRect(_ node: MindMapNode, frame: CGRect, isRoot: Bool) -> CGRect {
+        let metadata = node.priority > 0 || node.progress != nil || !node.tags.isEmpty || !node.note.isEmpty
+        return CGRect(x: frame.minX + 17, y: frame.minY + 12, width: max(1, frame.width - 34),
+                      height: max(1, LayoutEngine.titleSize(node, isRoot: isRoot).height - 24 - (metadata ? 19 : 0)))
+    }
+    static func titleTextColor(_ node: MindMapNode, isRoot: Bool, palette: MapPalette) -> NSColor {
+        node.style?.textColorHex.flatMap(NSColor.init(hex:)) ?? (isRoot ? .white : palette.text)
     }
     static func addChildRect(_ frame: CGRect, scale: CGFloat, left: Bool) -> CGRect {
         let scale = max(scale, 0.15), size = 18 / max(scale, 0.15)

@@ -1,7 +1,11 @@
 import SwiftUI
 
 struct MindoraSettings: View {
-    @State private var selection: SettingsSection = .general
+    @AppStorage("Mindora.Settings.Section") private var selectionRaw = "general"
+    private var selection: SettingsSection {
+        get { SettingsSection(rawValue: selectionRaw) ?? .general }
+        nonmutating set { selectionRaw = newValue.rawValue }
+    }
     @Environment(\.openWindow) private var openWindow
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("defaultTheme") private var theme = "indigo"
@@ -93,6 +97,10 @@ struct MindoraSettings: View {
             }
                 } else if selection == .storage {
             page {
+                Section("工作空间") {
+                    WorkspaceSwitcher()
+                    Text("每个空间拥有独立的文件、收藏与回收箱。文档右键可移动到其他空间。").font(.caption).foregroundStyle(.secondary)
+                }
                 Section("资料库位置") {
                     Text(library.rootURL.path).textSelection(.enabled).font(.callout)
                     HStack {
@@ -144,6 +152,8 @@ struct MindoraSettings: View {
                     Text("每份导图按独立 ID 分文件夹保存。恢复时先把备份复制到资料库并重命名，再打开；更改位置不会迁移旧备份。本机备份不能替代外部磁盘备份。").font(.caption).foregroundStyle(.secondary)
                 }
             }
+                } else if selection == .ai {
+            AISettingsView()
                 } else if selection == .shortcuts {
             ShortcutHelpView().padding(.horizontal, 28).padding(.bottom, 24)
                 } else {
@@ -155,7 +165,7 @@ struct MindoraSettings: View {
                     Text("面向 macOS 的本地思维导图工具，用于构思、学习、写作与项目规划。")
                 }
                 Section("数据与隐私") {
-                    Text("导图和备份保存在你选择的本机文件夹。当前版本无需账户，不提供云同步服务。")
+                    Text("导图和备份保存在你选择的本机文件夹。AI 功能按需连接你配置的模型服务，消息和授权共享的内容会发送到该服务；API 密钥保存在系统钥匙串。")
                 }
                 Section("反馈") {
                     Text("反馈问题时，请附上版本、操作步骤与预期结果，并自行移除导图中的私人内容。当前为开发预览版。")
@@ -170,7 +180,7 @@ struct MindoraSettings: View {
 
 
 private enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, appearance, storage, backup, shortcuts, about
+    case general, appearance, storage, backup, ai, shortcuts, about
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -179,6 +189,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .storage: "文件存储"
         case .backup: "备份"
         case .shortcuts: "快捷键"
+        case .ai: "AI 与 MCP"
         case .about: "关于 Mindora"
         }
     }
@@ -189,6 +200,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .storage: "folder"
         case .backup: "clock.arrow.circlepath"
         case .shortcuts: "keyboard"
+        case .ai: "sparkles"
         case .about: "info.circle"
         }
     }
@@ -199,6 +211,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .storage: "掌握文件的位置，让每一个想法都有归处。"
         case .backup: "为重要的内容，保留可追溯的副本。"
         case .shortcuts: "减少打断，让思路跟上你的节奏。"
+        case .ai: "配置模型、连接扩展工具，掌控助手操作权限。"
         case .about: "让想法连接成图。"
         }
     }
@@ -206,7 +219,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
 struct ShortcutHelpView: View {
     private let groups: [(String, [(String, String)])] = [
-        ("文件与应用", [("新建导图", "⌘N"), ("新建文件夹", "⇧⌘N"), ("打开 / 保存 / 另存为", "⌘O / ⌘S / ⇧⌘S"), ("返回资料库", "⌘["), ("设置", "⌘,"), ("快捷键帮助", "⌘/")]),
+        ("文件与应用", [("新建导图", "⌘N"), ("新建文件夹", "⇧⌘N"), ("打开 / 保存 / 另存为", "⌘O / ⌘S / ⇧⌘S"), ("返回资料库", "⌘["), ("设置", "⌘,"), ("快捷键帮助", "⌘/"), ("AI 助手", "⇧⌘A")]),
         ("主题编辑 · 画布获得焦点时", [("添加子主题 / 同级主题", "⌘K / ⇧⌘K"), ("添加子主题（画布）", "Tab"), ("插入网址 / 代码", "⌥⌘K / ⌥⌘C"), ("编辑选中文字", "⌘E / F2"), ("文字内换行", "⇧Return"), ("删除选中主题", "Delete"), ("切换选中主题 / 扩展选择", "方向键 / ⇧方向键"), ("选中中心主题", "Esc"), ("全选 / 复制 / 剪切 / 粘贴", "⌘A / ⌘C / ⌘X / ⌘V"), ("创建主题副本", "⌘D"), ("展开或折叠", "⌘."), ("同级主题上移 / 下移", "⌥⌘↑ / ⌥⌘↓"), ("撤销 / 重做", "⌘Z / ⇧⌘Z")]),
         ("导航与视图", [("搜索", "⌘F"), ("命令面板", "⇧⌘P"), ("适应画布 / 定位选中主题", "⌘0 / ⌘L"), ("显示或隐藏大纲 / 属性", "⌥⌘1 / ⌥⌘2"), ("专注模式", "⇧⌘F"), ("导入", "⇧⌘I"), ("缩放画布", "触控板捏合 / ⌘滚动")])
     ]

@@ -14,6 +14,11 @@ struct WorkspaceView: View {
                 LibraryHomeView(workspace: workspace)
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { openWindow(id: "ai-assistant") } label: { Label("AI 助手", systemImage: "sparkles") }.help("AI 助手 ⇧⌘A")
+            }
+        }
         .background(WorkspaceWindowReader(workspace: workspace))
         .onAppear { workspace.presentWorkspace = { openWindow(id: "workspace") } }
         .onOpenURL { url in

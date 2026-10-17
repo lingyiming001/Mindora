@@ -5,6 +5,7 @@ struct EditorSidebar<Outline: View>: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var model: EditorModel
     @ObservedObject private var library = LibraryStore.shared
+    @ObservedObject private var catalog = WorkspaceCatalog.shared
     let outline: Outline
     let allowsOutline: Bool
     @State private var recentExpanded = false
@@ -20,23 +21,7 @@ struct EditorSidebar<Outline: View>: View {
                         .font(.system(size: 12, weight: .semibold))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    HStack(spacing: 8) {
-                            Image(systemName: "point.3.connected.trianglepath.dotted")
-                                .font(.system(size: 17, weight: .medium)).foregroundStyle(InterfaceStyle.accent)
-                        Text("Mindora").font(.system(size: 16, weight: .semibold))
-                        Spacer()
-                        Menu {
-                            Button("新建思维导图    ⌘N") { newMap() }
-                            Button("新建文件夹…    ⇧⌘N") { library.promptNewFolder() }
-                            Divider()
-                            Button("导入现有导图…") { library.importMaps() }
-                            Button("选择资料库位置…") { library.chooseLocation() }
-                            Button("在 Finder 中打开资料库") { library.revealInFinder(library.rootURL) }
-                            Divider()
-                            Button("刷新目录") { library.reload() }
-                        } label: { Image(systemName: "ellipsis").font(.system(size: 12)).foregroundStyle(.secondary) }
-                            .menuStyle(.borderlessButton).frame(width: 20)
-                    }
+                    WorkspaceSwitcher()
                     Button { newMap() } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "plus")
@@ -60,7 +45,7 @@ struct EditorSidebar<Outline: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.tertiary)
-                TextField("搜索资料库", text: $library.searchText).textFieldStyle(.plain).font(.system(size: 11))
+                TextField("搜索当前空间", text: $library.searchText).textFieldStyle(.plain).font(.system(size: 11))
                 if !library.searchText.isEmpty {
                     Button { library.searchText = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }.buttonStyle(.plain)
                 }
@@ -82,28 +67,15 @@ struct EditorSidebar<Outline: View>: View {
                         Divider().padding(.vertical, 8)
                     }
                     HStack {
-                        Text("资料库").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                        Button("文件") { library.selectFolder(library.rootURL) }
+                            .buttonStyle(.plain).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                            .help("返回工作空间根目录")
                         Spacer()
                         Button { library.promptNewFolder() } label: { Image(systemName: "folder.badge.plus").font(.system(size: 12)) }
                             .buttonStyle(.plain).help("新建文件夹（⇧⌘N）")
                         Button { library.reload() } label: { Image(systemName: "arrow.clockwise").font(.system(size: 11)) }
                             .buttonStyle(.plain).help("刷新目录")
                     }.padding(.horizontal, 8).padding(.bottom, 3)
-                    Button { library.selectFolder(library.rootURL) } label: {
-                        HStack(spacing: 7) {
-                            Image(systemName: "externaldrive").foregroundStyle(model.document.theme.color)
-                            Text(library.rootURL.lastPathComponent == "Library" ? "本地资料库" : library.rootURL.lastPathComponent)
-                                .font(.system(size: 12, weight: .medium)).lineLimit(1)
-                            Spacer(minLength: 0)
-                            Text("\(library.totalMaps)").font(.system(size: 10)).foregroundStyle(.secondary)
-                        }.padding(.horizontal, 8).padding(.vertical, 8)
-                            .background(library.currentFolderURL == library.rootURL ? model.document.theme.color.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 7))
-                    }.buttonStyle(.plain).sidebarHoverFeedback(tint: model.document.theme.color)
-                        .contextMenu {
-                            Button("新建思维导图") { library.newMap(in: library.rootURL) }
-                            Button("新建文件夹…") { library.promptNewFolder(in: library.rootURL) }
-                            Button("在 Finder 中显示") { library.revealInFinder(library.rootURL) }
-                        }
                         .onDrop(of: [UTType.fileURL], isTargeted: nil) { providers in acceptDrop(providers, to: library.rootURL) }
                     if library.isLoading && library.items.isEmpty { ProgressView().controlSize(.small).padding(18) }
                     ForEach(library.filteredItems) { item in LibraryTreeRow(item: item, library: library, model: model, depth: 0) }
@@ -140,7 +112,7 @@ struct EditorSidebar<Outline: View>: View {
             }.buttonStyle(.plain).sidebarHoverFeedback()
             HStack {
                 Image(systemName: "folder").foregroundStyle(.secondary)
-                Text(library.currentFolderURL == library.rootURL ? "本地资料库" : library.currentFolderURL.lastPathComponent)
+                Text(library.currentFolderURL == library.rootURL ? (catalog.current(library.rootURL)?.name ?? "工作空间") : library.currentFolderURL.lastPathComponent)
                     .lineLimit(1).font(.system(size: 10)).foregroundStyle(.secondary)
                 Spacer(minLength: 2)
                 Button { library.revealInFinder(library.currentFolderURL) } label: { Image(systemName: "arrow.up.right.square").font(.system(size: 10)) }.buttonStyle(.plain).help("在 Finder 中显示当前文件夹")
@@ -205,6 +177,7 @@ private struct LibraryTreeRow: View {
                 Divider()
                 Button("重命名…") { model.finishEditing?(); library.promptRename(item) }
                 Button("移动到…") { model.finishEditing?(); library.promptMove(item) }
+                MoveToWorkspaceMenu(item: item)
                 Button("创建副本") { model.finishEditing?(); library.duplicate(item) }
                 Button(library.isFavorite(item.url) ? "取消收藏" : "添加到收藏") { library.toggleFavorite(item.url) }
                 Button("在 Finder 中显示") { library.revealInFinder(item.url) }

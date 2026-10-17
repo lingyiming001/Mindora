@@ -14,6 +14,7 @@ import SwiftUI
         .commands { EditorCommands() }
         Settings { MindoraSettings() }
         Window("回收箱", id: "recycle-bin") { RecycleBinView() }.defaultSize(width: 720, height: 540)
+        Window("AI 助手", id: "ai-assistant") { AIAssistantView() }.defaultSize(width: 500, height: 760)
         Window("键盘快捷键", id: "shortcuts") { ShortcutHelpView().padding(24).frame(width: 580, height: 620) }
     }
 }
@@ -26,8 +27,7 @@ import SwiftUI
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
-            _ = WorkspaceStore.shared.showFolder()
-            WorkspaceStore.shared.presentWorkspace?()
+            WorkspaceStore.shared.reopenWorkspace()
         }
         return true
     }

@@ -65,6 +65,7 @@ struct MindMapCanvas: NSViewRepresentable {
 
     func refresh() {
         if let id = editingID, model.document.root.find(id) == nil { endEditing(commit: false) }
+        if inlineEditor != nil { repositionEditor() }
         needsDisplay = true
         updateAccessibility()
     }
@@ -84,7 +85,7 @@ struct MindMapCanvas: NSViewRepresentable {
         super.viewDidMoveToWindow(); window?.makeFirstResponder(self)
         DispatchQueue.main.async { [weak self] in self?.updateAccessibility() }
     }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); if inlineEditor != nil { repositionEditor() }; needsDisplay = true }
     override func layout() { super.layout(); repositionEditor(); updateAccessibility() }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -102,7 +103,7 @@ struct MindMapCanvas: NSViewRepresentable {
         let topLeft = model.viewport.worldPoint(bounds.origin, in: bounds.size)
         let visible = CGRect(origin: topLeft, size: CGSize(width: bounds.width / model.viewport.scale, height: bounds.height / model.viewport.scale))
         CanvasRenderer.draw(document: model.document, layout: model.layoutResult, palette: palette,
-                            visibleRect: visible, selectedIDs: model.selectedIDs, dropTarget: dropTarget, scale: model.viewport.scale)
+                            visibleRect: visible, selectedIDs: model.selectedIDs, dropTarget: dropTarget, scale: model.viewport.scale, editingNodeID: editingID)
         context.restoreGState()
         if dragActive, !isPanning {
             let label = dropTarget == nil ? "拖到其他主题上，移动分支" : "松开以移入该主题"
@@ -285,16 +286,24 @@ struct MindMapCanvas: NSViewRepresentable {
 
     func beginEditing(_ id: UUID?, initialText: String? = nil) {
         guard let id, let item = model.document.root.find(id), model.layoutResult.frames[id] != nil else { return }
+        if editingID == id, let inlineEditor { window?.makeFirstResponder(inlineEditor); return }
         endEditing(commit: true)
         let editor = CanvasTextView(frame: .zero)
         editor.isRichText = false; editor.importsGraphics = false; editor.allowsUndo = true
-        editor.font = LayoutEngine.font(item, isRoot: id == model.document.root.id); editor.textColor = .labelColor; editor.backgroundColor = .textBackgroundColor
-        editor.textContainerInset = NSSize(width: 10, height: 9)
+        editor.font = LayoutEngine.font(item, isRoot: id == model.document.root.id)
+        editor.drawsBackground = false; editor.backgroundColor = .clear
+        editor.focusRingType = .none
+        editor.textContainerInset = .zero
+        editor.textContainer?.lineFragmentPadding = 0
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = (item.style?.textAlignment ?? .center).appKit
+        paragraph.lineBreakMode = .byCharWrapping
+        editor.defaultParagraphStyle = paragraph
         editor.isHorizontallyResizable = false; editor.isVerticallyResizable = true
         editor.textContainer?.widthTracksTextView = true
         editor.delegate = self
-        editor.wantsLayer = true; editor.layer?.cornerRadius = 10; editor.layer?.borderWidth = 2
-        editor.layer?.borderColor = model.document.theme.accent.cgColor
+        editor.wantsLayer = true; editor.layer?.borderWidth = 0
+        editor.layer?.backgroundColor = NSColor.clear.cgColor
         editor.string = initialText ?? item.title
         editor.alignment = (item.style?.textAlignment ?? .center).appKit
         editor.onFinish = { [weak self] commit in self?.endEditing(commit: commit) }
@@ -304,7 +313,7 @@ struct MindMapCanvas: NSViewRepresentable {
                 self.endEditing(commit: true, restoreFocus: false)
             }
         }
-        editingID = id; inlineEditor = editor; addSubview(editor); repositionEditor()
+        editingID = id; inlineEditor = editor; addSubview(editor); repositionEditor(); needsDisplay = true
         window?.makeFirstResponder(editor)
         editor.setSelectedRange(initialText == nil ? NSRange(location: 0, length: (editor.string as NSString).length) : NSRange(location: (editor.string as NSString).length, length: 0))
     }
@@ -313,28 +322,30 @@ struct MindMapCanvas: NSViewRepresentable {
     }
     private func repositionEditor() {
         guard let editor = inlineEditor, let id = editingID, let frame = model.layoutResult.frames[id] else { return }
-        var titleFrame = frame
-        if let node = model.document.root.find(id) { titleFrame.size.height = LayoutEngine.titleSize(node, isRoot: id == model.document.root.id).height }
-        var screen = model.viewport.screenRect(titleFrame, in: bounds.size)
-        screen.size.width = max(screen.width, 160)
-        if let node = model.document.root.find(id) {
-            let baseFont = LayoutEngine.font(node, isRoot: id == model.document.root.id)
-            editor.font = NSFontManager.shared.convert(baseFont, toSize: max(4, baseFont.pointSize * model.viewport.scale))
-        }
-        if let font = editor.font {
-            let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byCharWrapping
-            let measured = (editor.string as NSString).boundingRect(with: CGSize(width: max(1, screen.width - 20), height: CGFloat.greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font, .paragraphStyle: paragraph])
-            screen.size.height = max(64, ceil(measured.height) + 24)
-        }
-        screen.origin.x = min(max(8, screen.origin.x), max(8, bounds.width - screen.width - 8))
-        screen.origin.y = min(max(8, screen.origin.y), max(8, bounds.height - screen.height - 8))
+        guard let node = model.document.root.find(id) else { return }
+        let isRoot = id == model.document.root.id
+        // Use exactly the same title inset as drawing; never recenter or shift the editor.
+        let titleRect = CanvasRenderer.titleTextRect(node, frame: frame, isRoot: isRoot)
+        var screen = model.viewport.screenRect(titleRect, in: bounds.size)
+        screen.size.width = max(1, screen.width)
+        let baseFont = LayoutEngine.font(node, isRoot: isRoot)
+        let font = NSFontManager.shared.convert(baseFont, toSize: max(1, baseFont.pointSize * model.viewport.scale))
+        editor.font = font
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        editor.textColor = CanvasRenderer.titleTextColor(node, isRoot: isRoot, palette: MapPalette(theme: model.document.theme, dark: dark))
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byCharWrapping
+        paragraph.alignment = (node.style?.textAlignment ?? .center).appKit
+        let measured = (editor.string as NSString).boundingRect(with: CGSize(width: screen.width, height: CGFloat.greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font, .paragraphStyle: paragraph])
+        screen.size.height = max(screen.height, max(ceil(measured.height) + 2, font.ascender - font.descender + 2))
         editor.frame = screen
         updateAccessibility()
     }
     func endEditing(commit: Bool, restoreFocus: Bool = true) {
         guard let editor = inlineEditor, let id = editingID else { return }
         let value = editor.string
-        inlineEditor = nil; editingID = nil; editor.onResign = nil; editor.removeFromSuperview()
+        inlineEditor = nil; editingID = nil; editor.onResign = nil; editor.delegate = nil; editor.removeFromSuperview()
+        needsDisplay = true
         if commit { model.updateTitle(value, for: id) }
         if restoreFocus { window?.makeFirstResponder(self) }
     }

@@ -66,6 +66,9 @@ struct RecycleBinView: View {
         .onChange(of: library.rootURL) { _, _ in
             pendingDelete = nil; emptyConfirmation = false; library.loadRecycleBin()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .mindoraMainWindowDidClose)) { _ in
+            pendingDelete = nil; emptyConfirmation = false
+        }
         .alert("永久删除此项目？", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })) {
             Button("取消", role: .cancel) { pendingDelete = nil }
             Button("永久删除", role: .destructive) {

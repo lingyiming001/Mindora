@@ -3,8 +3,10 @@ import SwiftUI
 struct LibraryHomeView: View {
     @ObservedObject var workspace: WorkspaceStore
     @ObservedObject private var library = LibraryStore.shared
+    @ObservedObject private var catalog = WorkspaceCatalog.shared
     @StateObject private var navigation = EditorModel(document: MindMapDocument())
     @State private var showsSidebar = true
+    @State private var showsNewWorkspace = false
     @AppStorage("libraryDisplayMode") private var displayMode = "grid"
 
     private var items: [LibraryItem] {
@@ -36,7 +38,7 @@ struct LibraryHomeView: View {
                 Rectangle().fill(InterfaceStyle.divider).frame(height: 1)
                 HStack {
                     Image(systemName: "externaldrive").font(.system(size: 10))
-                    Text(library.rootURL.lastPathComponent == "Library" ? "本地资料库" : library.rootURL.lastPathComponent)
+                    Text(catalog.current(library.rootURL)?.name ?? "工作空间")
                     Spacer()
                     Text("\(items.count) 项")
                 }.font(.system(size: 10)).foregroundStyle(.tertiary).padding(.horizontal, 24).frame(height: 32)
@@ -52,6 +54,7 @@ struct LibraryHomeView: View {
                 SettingsLink { Label("设置", systemImage: "gearshape") }
                 Button { workspace.chooseFile() } label: { Label("打开", systemImage: "folder") }
                 Menu {
+                    Button("新建工作空间…") { showsNewWorkspace = true }
                     Button("新建文件夹…") { library.promptNewFolder() }
                     Button("导入现有导图…") { library.importMaps() }
                     Divider()
@@ -61,6 +64,8 @@ struct LibraryHomeView: View {
                 } label: { Label("文件管理", systemImage: "ellipsis") }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .mindoraMainWindowDidClose)) { _ in showsNewWorkspace = false }
+        .sheet(isPresented: $showsNewWorkspace) { WorkspaceDetailsEditor(workspace: nil) }
         .onAppear {
             library.reload()
             let value = UserDefaults.standard.string(forKey: "appearance") ?? "system"
@@ -70,7 +75,7 @@ struct LibraryHomeView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 6) {
-                Button("资料库") { library.selectFolder(library.rootURL) }.buttonStyle(.plain)
+                Button(catalog.current(library.rootURL)?.name ?? "工作空间") { library.selectFolder(library.rootURL) }.buttonStyle(.plain)
                 ForEach(breadcrumbs, id: \.self) { url in
                     Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(.tertiary)
                     Button(url.lastPathComponent) { library.selectFolder(url) }.buttonStyle(.plain).lineLimit(1)
@@ -81,6 +86,10 @@ struct LibraryHomeView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(library.currentFolderURL == library.rootURL ? "我的导图" : library.currentFolderURL.lastPathComponent)
                         .font(.system(size: 23, weight: .semibold))
+                    if library.currentFolderURL == library.rootURL,
+                       let intro = catalog.current(library.rootURL)?.introduction, !intro.isEmpty {
+                        Text(intro).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                     Text("\(folders.count) 个文件夹 · \(maps.count) 份导图")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
@@ -208,6 +217,7 @@ private struct LibraryItemActions: View {
         Divider()
         Button("重命名…") { library.promptRename(item) }
         Button("移动到…") { library.promptMove(item) }
+        MoveToWorkspaceMenu(item: item)
         Button("创建副本") { library.duplicate(item) }
         Button(library.isFavorite(item.url) ? "取消收藏" : "收藏") { library.toggleFavorite(item.url) }
         Button("在 Finder 中显示") { library.revealInFinder(item.url) }
@@ -272,11 +282,14 @@ private struct DocumentThumbnail: View {
         }
         .task(id: "\(url.path):\(revision)") {
             document = nil; layout = nil; unavailable = false
+            let worker = Task { try await LibraryPreviewCache.shared.preview(url) }
+            let activityID = PanelActivityStore.shared.register(worker)
+            defer { PanelActivityStore.shared.finish(activityID) }
             do {
-                let preview = try await LibraryPreviewCache.shared.preview(url)
-                guard !Task.isCancelled else { return }
+                let preview = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                guard !Task.isCancelled, !worker.isCancelled else { return }
                 document = preview.0; layout = preview.1
-            } catch { if !Task.isCancelled { unavailable = true } }
+            } catch { if !Task.isCancelled, !worker.isCancelled { unavailable = true } }
         }
         .accessibilityLabel("思维导图内容预览")
     }
@@ -307,6 +320,7 @@ private actor LibraryPreviewCache {
         let document = try MapInterchange.read(url)
         try Task.checkCancellation()
         let layout = LayoutEngine.layout(document)
+        try Task.checkCancellation()
         entries[url] = Entry(modified: metadata.contentModificationDate, bytes: metadata.fileSize, document: document, layout: layout)
         recency.append(url); nodeCost += document.nodeCount
         while entries.count > 24 || nodeCost > 20_000 {

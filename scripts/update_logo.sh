@@ -11,3 +11,5 @@ for size in 16 32 128 256 512; do
     sips -z "$pixels" "$pixels" .build/Logo-square.png --out ".build/AppIcon.iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 python3 scripts/make_icns.py
+# Keep the Xcode asset catalog in sync with the legacy ICNS resource.
+cp .build/AppIcon.iconset/*.png Resources/Assets.xcassets/AppIcon.appiconset/

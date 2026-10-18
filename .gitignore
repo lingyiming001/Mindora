@@ -1,20 +1,17 @@
+# Personal OS and editor state
 .DS_Store
-.build/
-.agents/
-Mindora.xcodeproj/
-
- 
-
-# Local and generated files (project-continuity)
 Thumbs.db
-.env
-.env.*
-!.env.example
-!.env.sample
-!.env.*.example
-!.env.*.sample
+**/xcuserdata/
+*.xcuserstate
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/shelf/
 
-# Reproducible local release packages
-deploy/*.zip
+# Local agent state and verification artifacts
+/.agents/
 
-.idea/
+# Build products and release archives
+/.build/
+/DerivedData/
+/build/
+/deploy/*.zip

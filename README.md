@@ -6,13 +6,17 @@
 
 用 Xcode 打开 `Mindora.xcodeproj`，选择 `Mindora` scheme 运行。启动直接显示资料库和文件夹内容；新建或打开导图在当前窗口进入编辑器，左上角“返回资料库”可回到文件夹。
 
+Xcode 中选择 **Mindora target → Signing & Capabilities** 配置开发团队及权限，按 ⌘R 构建运行；发布可用 Product → Archive。版本号和构建号在 General 中管理，图标位于 `Resources/Assets.xcassets/AppIcon.appiconset`，文档类型位于 `Resources/Info.plist`。
+
+App 默认启用 Sandbox、用户选择文件读写、应用范围文件书签、出站网络和 Hardened Runtime。网络权限用于模型及 HTTP MCP；沙盒内执行任意本机 stdio MCP 程序仍受系统限制，需单独验证。未配置团队时可进行本机 ad hoc 构建，正式分发需配置团队及相应签名。
+
 也可在项目根目录运行：
 
 ```sh
 ./scripts/run.sh
 ```
 
-如果旧版应用仍在运行，先用 ⌘Q 退出，再运行脚本，以加载新代码。脚本会生成工程文件、构建本地 App、进行 ad hoc 签名并启动。生成物位于 `.build/xcode/Build/Products/Debug/Mindora.app`。本地脚本没有附加发行沙盒 entitlement；正式签名和沙盒运行需在 Xcode 选择开发团队后完成。`Package.swift` 保留作为命令行开发与单元测试入口。
+如果旧版应用仍在运行，先用 ⌘Q 退出，再运行脚本，以加载新代码。脚本使用已纳入版本管理的工程构建本地 App、进行 ad hoc 签名并启动；默认 Release 产物位于 `.build/xcode/Build/Products/Release/Mindora.app`。脚本构建保留无沙盒的本地开发方式；验证正式 App 权限请使用 Xcode 构建运行。`Package.swift` 保留作为命令行开发与单元测试入口。
 
 ## 编辑功能
 
@@ -41,7 +45,7 @@
 
 ## 开发与实现状态
 
-目录按 `App / Domain / Editor / Layout / Canvas / DesignSystem / Features / ImportExport / Persistence` 划分，工程由 `scripts/generate_project.py` 根据源码树生成。新增 Swift 文件后运行该脚本，或直接运行启动脚本。
+目录按 `App / Domain / Editor / Layout / Canvas / DesignSystem / Features / ImportExport / Persistence` 划分，`Mindora.xcodeproj` 是正式 macOS App 工程，包含共享 `Mindora` scheme、Debug/Release 配置和 Archive 入口。新增 Swift 文件请在 Xcode 中添加并勾选 Mindora target；构建脚本不会覆盖工程。`scripts/generate_project.py` 仅供显式重新生成，运行会覆盖 Xcode 工程配置。
 
 历史上 19 项测试通过，覆盖命令撤销、文件格式、布局与导出；资料库版本已完成启动构建。单窗口版本已完成启动构建。**2026-10-14 的最新界面改动按用户要求未构建或测试**，需要用户运行确认。尚待完成的功能包括关系线/概要/附件、高级布局、历史恢复、性能基准、AI 与同步，见 [开发状态](docs/dev/STATUS.md)。
 

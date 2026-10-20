@@ -11,6 +11,9 @@ import UniformTypeIdentifiers
     @Published private(set) var saveStatus = ""
     @Published var errorMessage: String?
     var presentWorkspace: (() -> Void)?
+    @Published private(set) var openingURL: URL?
+    private var openTask: Task<Void, Never>?
+    private var openRequest = UUID()
     private var autosaveTask: Task<Void, Never>?
     private var document: MindoraDocument?
     private var scopedURL: URL?
@@ -48,19 +51,47 @@ import UniformTypeIdentifiers
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
+    func cancelOpen() {
+        openRequest = UUID(); openTask?.cancel(); openTask = nil; openingURL = nil
+    }
     func openFile(_ url: URL) {
+        cancelOpen()
         if fileURL?.standardizedFileURL == url.standardizedFileURL { activateWindow(); return }
+        let request = openRequest
         let accessed = url.startAccessingSecurityScopedResource()
-        do {
-            // Decode the destination before replacing a working editor.
-            let incoming = try MindoraDocument(contentsOf: url, ofType: UTType.mindora.identifier)
-            try install(incoming, accessedURL: accessed ? url : nil)
-        } catch {
-            if accessed { url.stopAccessingSecurityScopedResource() }
-            errorMessage = "无法打开导图：\(error.localizedDescription)"
+        openingURL = url
+        openTask = Task {
+            var transferred = false
+            defer {
+                if accessed && !transferred { url.stopAccessingSecurityScopedResource() }
+                if openRequest == request { openingURL = nil; openTask = nil }
+            }
+            let worker = Task.detached(priority: .userInitiated) {
+                try Task.checkCancellation()
+                let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                guard size <= MapInterchange.maximumFileBytes else { throw DocumentError.oversizedFile }
+                let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                let map = try MapInterchange.decodeJSON(data)
+                try Task.checkCancellation()
+                return (data, map)
+            }
+            do {
+                let (data, map) = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                guard !Task.isCancelled, openRequest == request else { return }
+                let incoming = MindoraDocument()
+                incoming.loadPrepared(map, data: data, url: url)
+                do {
+                    try install(incoming, accessedURL: accessed ? url : nil)
+                    transferred = true
+                } catch { incoming.close(); throw error }
+            } catch {
+                guard !Task.isCancelled, openRequest == request else { return }
+                errorMessage = "无法打开导图：\(error.localizedDescription)"
+            }
         }
     }
     func adopt(_ incoming: MindoraDocument) {
+        cancelOpen()
         if incoming === document { activateWindow(); return }
         let url = incoming.fileURL
         let accessed = url?.startAccessingSecurityScopedResource() ?? false
@@ -112,6 +143,7 @@ import UniformTypeIdentifiers
         updateWindow(); activateWindow()
     }
     @discardableResult func showFolder(_ url: URL? = nil) -> Bool {
+        cancelOpen()
         do {
             try saveActive()
             closeActiveDocument()
@@ -209,6 +241,7 @@ import UniformTypeIdentifiers
     }
     func mainWindowWillClose(_ mainWindow: NSWindow) {
         guard window === mainWindow, !isClosingWindows else { return }
+        cancelOpen()
         isClosingWindows = true
         defer { isClosingWindows = false }
         PanelActivityStore.shared.cancelAll()

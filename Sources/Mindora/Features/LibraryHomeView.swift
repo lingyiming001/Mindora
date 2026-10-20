@@ -138,7 +138,7 @@ struct LibraryHomeView: View {
         LazyVStack(spacing: 0) {
             ForEach(items) { item in
                 Button {
-                    if item.isFolder { library.selectFolder(item.url) } else { library.selectItem(item.url) }
+                    if item.isFolder { library.selectFolder(item.url) } else { library.openDocument(item.url) }
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: item.isFolder ? "folder.fill" : "doc.text")
@@ -150,7 +150,6 @@ struct LibraryHomeView: View {
                     }.padding(.horizontal, 14).frame(height: 46).contentShape(Rectangle())
                 }.buttonStyle(.plain)
                     .background(library.selectedItemURL == item.url ? InterfaceStyle.accent.opacity(0.1) : .clear)
-                    .simultaneousGesture(TapGesture(count: 2).onEnded { if !item.isFolder { library.openDocument(item.url) } })
                     .onKeyPress(.return) {
                         if item.isFolder { library.selectFolder(item.url) } else { library.openDocument(item.url) }
                         return .handled
@@ -183,9 +182,9 @@ private struct LibraryMapCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     var body: some View {
-        Button { library.selectItem(item.url) } label: {
+        Button { library.openDocument(item.url) } label: {
             VStack(alignment: .leading, spacing: 11) {
-                DocumentThumbnail(url: item.url, revision: library.previewRevision).frame(height: 132)
+                DocumentThumbnail(url: item.url, version: item.contentVersion).frame(height: 132)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke((hovered || library.selectedItemURL == item.url) ? InterfaceStyle.accent.opacity(0.6) : InterfaceStyle.divider, lineWidth: 1))
                     .shadow(color: .black.opacity(hovered ? (colorScheme == .dark ? 0.3 : 0.14) : 0.04), radius: hovered ? 10 : 2, x: 0, y: hovered ? 4 : 1)
@@ -196,9 +195,8 @@ private struct LibraryMapCard: View {
                 }.padding(.horizontal, 2)
             }.contentShape(Rectangle())
         }.buttonStyle(.plain)
-            .simultaneousGesture(TapGesture(count: 2).onEnded { library.openDocument(item.url) })
             .onKeyPress(.return) { library.openDocument(item.url); return .handled }
-            .help("单击选中，双击或 Return 打开")
+            .help("点击或按 Return 打开导图")
             .onHover { hovered = $0 }
             .onDisappear { hovered = false }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: hovered)
@@ -228,10 +226,14 @@ private struct LibraryItemActions: View {
 
 private struct DocumentThumbnail: View {
     let url: URL
-    let revision: Int
+    let version: LibraryItem.ContentVersion
     @State private var document: MindMapDocument?
     @State private var layout: LayoutResult?
     @State private var unavailable = false
+    private struct PreviewIdentity: Hashable {
+        let url: URL
+        let version: LibraryItem.ContentVersion
+    }
     var body: some View {
         ZStack {
             InterfaceStyle.panel.opacity(0.55)
@@ -280,8 +282,8 @@ private struct DocumentThumbnail: View {
                 Text(unavailable ? "预览不可用" : "载入预览…").font(.system(size: 10)).foregroundStyle(.tertiary)
             }
         }
-        .task(id: "\(url.path):\(revision)") {
-            document = nil; layout = nil; unavailable = false
+        .task(id: PreviewIdentity(url: url, version: version), priority: .utility) {
+            unavailable = false
             let worker = Task { try await LibraryPreviewCache.shared.preview(url) }
             let activityID = PanelActivityStore.shared.register(worker)
             defer { PanelActivityStore.shared.finish(activityID) }
@@ -289,7 +291,11 @@ private struct DocumentThumbnail: View {
                 let preview = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                 guard !Task.isCancelled, !worker.isCancelled else { return }
                 document = preview.0; layout = preview.1
-            } catch { if !Task.isCancelled, !worker.isCancelled { unavailable = true } }
+            } catch {
+                if !Task.isCancelled, !worker.isCancelled {
+                    document = nil; layout = nil; unavailable = true
+                }
+            }
         }
         .accessibilityLabel("思维导图内容预览")
     }

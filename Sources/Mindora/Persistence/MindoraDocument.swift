@@ -14,6 +14,11 @@ final class MindoraDocument: NSDocument {
         map = try MapInterchange.decodeJSON(data)
         savedDigest = SHA256.hash(data: data)
     }
+    func loadPrepared(_ prepared: MindMapDocument, data: Data, url: URL) {
+        map = prepared; savedDigest = SHA256.hash(data: data)
+        fileURL = url; fileType = UTType.mindora.identifier
+        fileModificationDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+    }
     override func data(ofType typeName: String) throws -> Data { try MapInterchange.encodeJSON(map) }
     override func makeWindowControllers() {
         Task { @MainActor in WorkspaceStore.shared.adopt(self) }

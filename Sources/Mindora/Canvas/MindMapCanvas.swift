@@ -48,13 +48,30 @@ struct MindMapCanvas: NSViewRepresentable {
     private var isPanning = false
     private var spaceHeld = false
     private var dropTarget: UUID?
+    private var dragSession: NodeDragSession?
+    private var dropProposal: NodeDropTarget?
+    private let dragFeedback = DragFeedbackView()
+    private var dragTimer: Timer?
+    private var dragFlags: NSEvent.ModifierFlags = []
     private var pointer = CGPoint.zero
+    private struct AccessibilitySnapshot: Equatable {
+        let layoutRevision: Int
+        let viewport: CanvasViewport
+        let frame: CGRect
+        let selection: Set<UUID>
+        let editingID: UUID?
+        let windowNumber: Int
+    }
+    private var accessibilitySnapshot: AccessibilitySnapshot?
+
 
     init(model: EditorModel) {
         self.model = model
         super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = true
+        dragFeedback.autoresizingMask = [.width, .height]
+        addSubview(dragFeedback)
         model.finishEditing = { [weak self] in self?.finishResize(commit: true); self?.endEditing(commit: true) }
         model.canvasAction = { [weak self] action in self?.handle(action) }
         setAccessibilityLabel("思维导图画布")
@@ -83,10 +100,11 @@ struct MindMapCanvas: NSViewRepresentable {
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow(); window?.makeFirstResponder(self)
+        if window == nil { cancelDrag() }
         DispatchQueue.main.async { [weak self] in self?.updateAccessibility() }
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); if inlineEditor != nil { repositionEditor() }; needsDisplay = true }
-    override func layout() { super.layout(); repositionEditor(); updateAccessibility() }
+    override func layout() { super.layout(); dragFeedback.frame = bounds; repositionEditor(); updateAccessibility() }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
@@ -105,15 +123,6 @@ struct MindMapCanvas: NSViewRepresentable {
         CanvasRenderer.draw(document: model.document, layout: model.layoutResult, palette: palette,
                             visibleRect: visible, selectedIDs: model.selectedIDs, dropTarget: dropTarget, scale: model.viewport.scale, editingNodeID: editingID)
         context.restoreGState()
-        if dragActive, !isPanning {
-            let label = dropTarget == nil ? "拖到其他主题上，移动分支" : "松开以移入该主题"
-            let width = min(196.0, max(0, bounds.width - 16))
-            let rect = CGRect(x: min(max(8, pointer.x + 15), max(8, bounds.width - width - 8)),
-                              y: min(max(8, pointer.y + 15), max(8, bounds.height - 38)),
-                              width: width, height: 30)
-            palette.surface.setFill(); NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
-            (label as NSString).draw(at: CGPoint(x: rect.minX + 10, y: rect.minY + 7), withAttributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: palette.text])
-        }
     }
     private func drawGrid(_ palette: MapPalette) {
         let step: CGFloat = 24 * model.viewport.scale
@@ -122,11 +131,13 @@ struct MindMapCanvas: NSViewRepresentable {
         let origin = model.viewport.screenPoint(.zero, in: bounds.size)
         let xStart = origin.x.truncatingRemainder(dividingBy: step)
         let yStart = origin.y.truncatingRemainder(dividingBy: step)
+        let dots = NSBezierPath()
         for x in stride(from: xStart, through: bounds.width, by: step) {
             for y in stride(from: yStart, through: bounds.height, by: step) {
-                NSBezierPath(ovalIn: CGRect(x: x, y: y, width: 1.5, height: 1.5)).fill()
+                dots.appendOval(in: CGRect(x: x, y: y, width: 1.5, height: 1.5))
             }
         }
+        dots.fill()
     }
     private func node(at screen: CGPoint) -> UUID? {
         guard bounds.contains(screen) else { return nil }
@@ -139,8 +150,8 @@ struct MindMapCanvas: NSViewRepresentable {
         endEditing(commit: true); window?.makeFirstResponder(self)
         let position = convert(event.locationInWindow, from: nil)
         mouseStart = position; lastMouse = position; pointer = position; dragActive = false
-        draggingNode = nil; dropTarget = nil
-        isPanning = spaceHeld || event.modifierFlags.contains(.option)
+        draggingNode = nil; dropTarget = nil; dragSession = nil; dropProposal = nil
+        isPanning = spaceHeld
         if !isPanning {
             let world = model.viewport.worldPoint(position, in: bounds.size)
             for id in model.selectedIDs {
@@ -201,15 +212,63 @@ struct MindMapCanvas: NSViewRepresentable {
             model.previewSize(width: Double(initialResizeWidth + delta * (resizingRoot ? 2 : resizeFromLeft ? -1 : 1)), height: Double(initialResizeHeight + (position.y - resizeStartY) / resizeScale * 2))
             needsDisplay = true; return
         }
-        if hypot(position.x - mouseStart.x, position.y - mouseStart.y) > 5 { dragActive = true }
+        if !dragActive, hypot(position.x - mouseStart.x, position.y - mouseStart.y) > 5 {
+            dragActive = true
+            if !isPanning {
+                dragSession = model.makeDragSession()
+                if dragSession != nil {
+                    NSCursor.closedHand.set()
+                    let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+                        MainActor.assumeIsolated { self?.panDuringDrag() }
+                    }
+                    dragTimer = timer; RunLoop.main.add(timer, forMode: .common)
+                }
+            }
+        }
         if isPanning {
             model.viewport.offset.x += position.x - lastMouse.x
             model.viewport.offset.y += position.y - lastMouse.y
         } else if draggingNode != nil, dragActive {
-            let target = node(at: position)
-            dropTarget = target.flatMap { model.canMoveSelection(to: $0) ? $0 : nil }
+            updateDrag(at: position, flags: event.modifierFlags)
+            lastMouse = position
+            return
         }
         lastMouse = position; needsDisplay = true
+    }
+    private func updateDrag(at position: CGPoint, flags: NSEvent.ModifierFlags) {
+        guard let session = dragSession, session.revision == model.historyRevision else { cancelDrag(); return }
+        dragFlags = flags
+        guard bounds.contains(position) else { dropProposal = nil; dragFeedback.feedback = nil; return }
+        dropProposal = session.resolve(at: position, viewport: model.viewport, size: bounds.size,
+            previous: dropProposal, forceChild: flags.contains(.option))
+        let target = dropProposal.flatMap { proposal in session.targets.first(where: { $0.id == proposal.id }) }
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        dragFeedback.feedback = DragFeedback(title: session.title, count: session.count, pointer: position,
+            targetTitle: target?.title, targetFrame: target.map { model.viewport.screenRect($0.frame, in: bounds.size) },
+            placement: dropProposal?.placement, vertical: session.verticalSiblings,
+            palette: MapPalette(theme: model.document.theme, dark: dark))
+    }
+    private func panDuringDrag() {
+        guard dragSession != nil, dragActive, bounds.contains(pointer) else { return }
+        let inset: CGFloat = 42
+        func speed(_ value: CGFloat, max extent: CGFloat) -> CGFloat {
+            if value < inset { return min(12, (inset - value) * 0.3) }
+            if value > extent - inset { return -min(12, (value - extent + inset) * 0.3) }
+            return 0
+        }
+        let dx = speed(pointer.x, max: bounds.width), dy = speed(pointer.y, max: bounds.height)
+        guard dx != 0 || dy != 0 else { return }
+        model.viewport.offset.x += dx; model.viewport.offset.y += dy
+        updateDrag(at: pointer, flags: dragFlags); needsDisplay = true
+    }
+    private func cancelDrag() {
+        dragTimer?.invalidate(); dragTimer = nil
+        dragSession = nil; dropProposal = nil; draggingNode = nil; dragActive = false; dropTarget = nil
+        dragFeedback.feedback = nil; NSCursor.arrow.set()
+    }
+    override func flagsChanged(with event: NSEvent) {
+        if dragSession != nil { updateDrag(at: pointer, flags: event.modifierFlags) }
+        else { super.flagsChanged(with: event) }
     }
     private func finishResize(commit: Bool) {
         guard resizingNode != nil else { return }
@@ -219,11 +278,11 @@ struct MindMapCanvas: NSViewRepresentable {
     }
     override func mouseUp(with event: NSEvent) {
         if resizingNode != nil { finishResize(commit: true); updateAccessibility(); return }
-        let position = convert(event.locationInWindow, from: nil)
-        if dragActive, !isPanning, let target = node(at: position), model.canMoveSelection(to: target) {
-            model.moveSelection(to: target)
+        if dragActive, !isPanning, let session = dragSession, session.revision == model.historyRevision {
+            updateDrag(at: convert(event.locationInWindow, from: nil), flags: event.modifierFlags)
+            if let proposal = dropProposal { model.moveSelection(relativeTo: proposal) }
         }
-        draggingNode = nil; dragActive = false; isPanning = false; dropTarget = nil
+        cancelDrag(); isPanning = false
         needsDisplay = true; updateAccessibility()
     }
     override func scrollWheel(with event: NSEvent) {
@@ -244,6 +303,7 @@ struct MindMapCanvas: NSViewRepresentable {
         needsDisplay = true; updateAccessibility()
     }
     override func keyDown(with event: NSEvent) {
+        if dragSession != nil { if event.keyCode == 53 { cancelDrag() }; return }
         if resizingNode != nil { if event.keyCode == 53 { finishResize(commit: false) }; return }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if event.keyCode == 49, !flags.contains(.command) { spaceHeld = true; NSCursor.openHand.set(); return }
@@ -381,6 +441,11 @@ struct MindMapCanvas: NSViewRepresentable {
 
     private func updateAccessibility() {
         guard let window else { return }
+        let snapshot = AccessibilitySnapshot(layoutRevision: model.layoutRevision, viewport: model.viewport,
+            frame: window.convertToScreen(convert(bounds, to: nil)), selection: model.selectedIDs,
+            editingID: editingID, windowNumber: window.windowNumber)
+        guard snapshot != accessibilitySnapshot else { return }
+        accessibilitySnapshot = snapshot
         let children = model.layoutResult.visibleNodes.compactMap { node -> NSAccessibilityElement? in
             guard let world = model.layoutResult.frames[node.id] else { return nil }
             let screen = model.viewport.screenRect(world, in: bounds.size)
@@ -422,4 +487,68 @@ private final class CanvasTextView: NSTextView {
 private final class CanvasAccessibilityElement: NSAccessibilityElement {
     var onPress: (() -> Void)?
     override func accessibilityPerformPress() -> Bool { onPress?(); return true }
+}
+
+private struct DragFeedback {
+    let title: String
+    let count: Int
+    let pointer: CGPoint
+    let targetTitle: String?
+    let targetFrame: CGRect?
+    let placement: NodeDropPlacement?
+    let vertical: Bool
+    let palette: MapPalette
+}
+
+/// Separate backing layer keeps pointer motion from redrawing every node, edge and grid dot.
+@MainActor private final class DragFeedbackView: NSView {
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    var feedback: DragFeedback? { didSet { needsDisplay = true } }
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; setAccessibilityElement(false) }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let value = feedback else { return }
+        let accent = value.palette.theme.accent
+        if let frame = value.targetFrame, let placement = value.placement {
+            if placement == .inside {
+                let shape = NSBezierPath(roundedRect: frame.insetBy(dx: -5, dy: -5), xRadius: 13, yRadius: 13)
+                accent.withAlphaComponent(0.14).setFill(); shape.fill()
+                accent.setStroke(); shape.lineWidth = 2.5; shape.stroke()
+            } else {
+                let line = NSBezierPath()
+                if value.vertical {
+                    let x = placement == .before ? frame.minX - 9 : frame.maxX + 9
+                    line.move(to: CGPoint(x: x, y: frame.minY - 12)); line.line(to: CGPoint(x: x, y: frame.maxY + 12))
+                } else {
+                    let y = placement == .before ? frame.minY - 9 : frame.maxY + 9
+                    line.move(to: CGPoint(x: frame.minX - 12, y: y)); line.line(to: CGPoint(x: frame.maxX + 12, y: y))
+                }
+                accent.setStroke(); line.lineWidth = 3; line.lineCapStyle = .round; line.stroke()
+            }
+        }
+        let action: String
+        let name = String((value.targetTitle ?? "").prefix(18))
+        switch value.placement {
+        case .before: action = "插入「\(name)」之前"
+        case .after: action = "插入「\(name)」之后"
+        case .inside: action = "移为「\(name)」的子主题"
+        case nil: action = "靠近主题选择位置 · Esc 取消"
+        }
+        let title = String(value.title.prefix(22)) + (value.count > 1 ? " 等 \(value.count) 个主题" : "")
+        let width: CGFloat = min(280, bounds.width - 16)
+        let rect = CGRect(x: max(8, min(value.pointer.x + 22, bounds.width - width - 8)),
+                          y: max(8, min(value.pointer.y + 22, bounds.height - 80)), width: width, height: 66)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow(); shadow.shadowColor = NSColor.black.withAlphaComponent(0.16)
+        shadow.shadowBlurRadius = 12; shadow.shadowOffset = CGSize(width: 0, height: -3); shadow.set()
+        let card = NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12)
+        value.palette.surface.setFill(); card.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        accent.withAlphaComponent(0.45).setStroke(); card.lineWidth = 1; card.stroke()
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+        (title as NSString).draw(in: rect.insetBy(dx: 13, dy: 10), withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: value.palette.text, .paragraphStyle: paragraph])
+        (action as NSString).draw(in: CGRect(x: rect.minX + 13, y: rect.minY + 36, width: width - 26, height: 20),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: value.placement == nil ? value.palette.secondary : accent, .paragraphStyle: paragraph])
+    }
 }

@@ -7,7 +7,13 @@ struct NodeLocation: Equatable {
 
 extension MindMapNode {
     func flattened(visibleOnly: Bool = false) -> [MindMapNode] {
-        [self] + ((visibleOnly && isCollapsed) ? [] : children.flatMap { $0.flattened(visibleOnly: visibleOnly) })
+        var result: [MindMapNode] = []
+        func append(_ node: MindMapNode) {
+            result.append(node)
+            if !visibleOnly || !node.isCollapsed { for child in node.children { append(child) } }
+        }
+        append(self)
+        return result
     }
     func find(_ target: UUID) -> MindMapNode? {
         if id == target { return self }

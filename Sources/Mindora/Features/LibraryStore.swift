@@ -7,18 +7,24 @@ struct LibraryItem: Identifiable, Equatable {
     let url: URL
     let isFolder: Bool
     let children: [LibraryItem]
+    struct ContentVersion: Hashable {
+        let modified: Date?
+        let bytes: Int?
+    }
+    let contentVersion: ContentVersion
     var id: URL { url }
     var name: String { isFolder ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent }
     let totalMaps: Int
-    init(url: URL, isFolder: Bool, children: [LibraryItem]) {
+    init(url: URL, isFolder: Bool, children: [LibraryItem], modified: Date? = nil, bytes: Int? = nil) {
         self.url = url; self.isFolder = isFolder; self.children = children
+        contentVersion = ContentVersion(modified: modified, bytes: bytes)
         totalMaps = isFolder ? children.reduce(0) { $0 + $1.totalMaps } : 1
     }
     func matching(_ query: String) -> LibraryItem? {
         guard !query.isEmpty else { return self }
         if name.localizedCaseInsensitiveContains(query) { return self }
         let matches = children.compactMap { $0.matching(query) }
-        return matches.isEmpty ? nil : LibraryItem(url: url, isFolder: isFolder, children: matches)
+        return matches.isEmpty ? nil : LibraryItem(url: url, isFolder: isFolder, children: matches, modified: contentVersion.modified, bytes: contentVersion.bytes)
     }
 }
 
@@ -41,7 +47,6 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
     @Published var searchText = "" { didSet { updateSearchResults() } }
     @Published private(set) var filteredItems: [LibraryItem] = []
     @Published private(set) var isLoading = false
-    @Published private(set) var previewRevision = 0
     @Published var errorMessage: String?
     @Published private(set) var favoritePaths: Set<String>
     private var scopedURL: URL?
@@ -126,7 +131,6 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
                     }
                     visit(result)
                     folderIndex = index
-                    previewRevision &+= 1
                     if items != result { items = result; updateSearchResults() }
                     expandedFolders.formIntersection(index.keys)
                     if index[currentFolderURL] == nil { currentFolderURL = rootURL }
@@ -164,7 +168,7 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
     private nonisolated static func scan(_ root: URL, excluding backupFolder: URL, depth: Int = 0) throws -> [LibraryItem] {
         try Task.checkCancellation()
         guard depth < 64, !BackupStore.contains(root, in: backupFolder) else { return [] }
-        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .isRegularFileKey]
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .isRegularFileKey, .contentModificationDateKey, .fileSizeKey]
         let urls = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])
         return try urls.compactMap { url in
             try Task.checkCancellation()
@@ -175,7 +179,7 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
                 return LibraryItem(url: url, isFolder: true, children: try scan(url, excluding: backupFolder, depth: depth + 1))
             }
             guard values.isRegularFile == true, url.pathExtension.lowercased() == "mindora" else { return nil }
-            return LibraryItem(url: url, isFolder: false, children: [])
+            return LibraryItem(url: url, isFolder: false, children: [], modified: values.contentModificationDate, bytes: values.fileSize)
         }.sorted {
             if $0.isFolder != $1.isFolder { return $0.isFolder }
             return $0.name.localizedStandardCompare($1.name) == .orderedAscending

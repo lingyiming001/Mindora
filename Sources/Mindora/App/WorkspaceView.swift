@@ -14,6 +14,15 @@ struct WorkspaceView: View {
                 LibraryHomeView(workspace: workspace)
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if let url = workspace.openingURL {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    Text("正在打开 \(url.deletingPathExtension().lastPathComponent)…").lineLimit(1)
+                    Button("取消") { workspace.cancelOpen() }
+                }.padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10)).padding(16)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { openWindow(id: "ai-assistant") } label: { Label("AI 助手", systemImage: "sparkles") }.help("AI 助手 ⇧⌘A")

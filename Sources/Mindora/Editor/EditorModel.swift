@@ -7,6 +7,67 @@ struct CanvasRequest: Equatable {
     let action: Action
 }
 
+enum NodeDropPlacement: String { case before, inside, after }
+struct NodeDropTarget: Equatable {
+    let id: UUID
+    let placement: NodeDropPlacement
+}
+
+/// Immutable geometry and eligibility captured once; pointer motion never walks the document tree.
+struct NodeDragSession {
+    struct Target { let id: UUID; let title: String; let frame: CGRect; let isRoot: Bool }
+    let revision: Int
+    let title: String
+    let count: Int
+    let targets: [Target]
+    func resolve(at point: CGPoint, viewport: CanvasViewport, size: CGSize,
+                 previous: NodeDropTarget? = nil, forceChild: Bool = false) -> NodeDropTarget? {
+        if size.width > 0 && size.height > 0 && !CGRect(origin: .zero, size: size).contains(point) { return nil }
+        if let previous, let target = targets.first(where: { $0.id == previous.id }) {
+            let frame = viewport.screenRect(target.frame, in: size)
+            if forceChild, frame.insetBy(dx: -20, dy: -20).contains(point) { return NodeDropTarget(id: target.id, placement: .inside) }
+            let zone = dropZone(frame: frame, placement: previous.placement)
+            let tolerance = min(6, (verticalSiblings ? frame.width : frame.height) * 0.1)
+            if !forceChild, zone.insetBy(dx: -tolerance, dy: -tolerance).contains(point) { return previous }
+        }
+        var nearest: (Target, CGRect)?
+        var best = CGFloat.greatestFiniteMagnitude
+        for target in targets {
+            let frame = viewport.screenRect(target.frame, in: size)
+            guard frame.insetBy(dx: -20, dy: -20).contains(point) else { continue }
+            let score = distance(point, to: frame)
+            if score < best { nearest = (target, frame); best = score }
+        }
+        guard let (target, frame) = nearest else { return nil }
+        let placement: NodeDropPlacement
+        if forceChild || target.isRoot { placement = .inside }
+        else {
+            let axis = verticalSiblings ? point.x : point.y
+            let start = verticalSiblings ? frame.minX : frame.minY
+            let length = verticalSiblings ? frame.width : frame.height
+            placement = axis < start + length * 0.28 ? .before : axis > start + length * 0.72 ? .after : .inside
+        }
+        return NodeDropTarget(id: target.id, placement: placement)
+    }
+    let verticalSiblings: Bool
+    func dropZone(frame: CGRect, placement: NodeDropPlacement) -> CGRect {
+        if placement == .inside {
+            return verticalSiblings ? frame.insetBy(dx: frame.width * 0.28, dy: -16) : frame.insetBy(dx: -16, dy: frame.height * 0.28)
+        }
+        if verticalSiblings {
+            return CGRect(x: placement == .before ? frame.minX - 20 : frame.minX + frame.width * 0.72,
+                          y: frame.minY - 16, width: frame.width * 0.28 + 20, height: frame.height + 32)
+        }
+        return CGRect(x: frame.minX - 16, y: placement == .before ? frame.minY - 20 : frame.minY + frame.height * 0.72,
+                      width: frame.width + 32, height: frame.height * 0.28 + 20)
+    }
+    private func distance(_ point: CGPoint, to frame: CGRect) -> CGFloat {
+        let dx = max(frame.minX - point.x, 0, point.x - frame.maxX)
+        let dy = max(frame.minY - point.y, 0, point.y - frame.maxY)
+        return dx * dx + dy * dy
+    }
+}
+
 @MainActor final class EditorModel: ObservableObject {
     @Published private(set) var document: MindMapDocument { didSet { if !isResizePreview { documentDidChange?(document) } } }
     @Published private(set) var layoutResult: LayoutResult
@@ -22,6 +83,7 @@ struct CanvasRequest: Equatable {
     private var panelsBeforeFocus: (outline: Bool, inspector: Bool)?
     @Published var errorMessage: String?
     @Published private(set) var historyRevision = 0
+    private(set) var layoutRevision = 0
 
     private var isResizePreview = false
     private var resizeOrigin: (UUID, NodeProperties)?
@@ -85,19 +147,28 @@ struct CanvasRequest: Equatable {
         selectedIDs = [document.root.id]
     }
     var selectedNode: MindMapNode? { selectedID.flatMap { document.root.find($0) } }
+    static let historyLimit = 400
+    var undoCount: Int { undoStack.count }
+    var redoCount: Int { redoStack.count }
+    var undoSteps: [String] { undoStack.suffix(50).reversed().map(\.name) }
+    var redoSteps: [String] { redoStack.suffix(50).reversed().map(\.name) }
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
     var undoName: String { undoStack.last?.name ?? "" }
     var redoName: String { redoStack.last?.name ?? "" }
+    private var searchCache: (query: String, revision: Int, matches: [MindMapNode])?
     var searchMatches: [MindMapNode] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
-        return document.allNodes.filter { node in
+        if let cache = searchCache, cache.query == query, cache.revision == historyRevision { return cache.matches }
+        let matches = document.allNodes.filter { node in
             node.title.localizedCaseInsensitiveContains(query) || node.note.localizedCaseInsensitiveContains(query)
                 || node.code.localizedCaseInsensitiveContains(query) || node.link.localizedCaseInsensitiveContains(query)
                 || node.attachments.contains(where: { $0.name.localizedCaseInsensitiveContains(query) })
                 || node.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
         }
+        searchCache = (query, historyRevision, matches)
+        return matches
     }
 
     func toggleFocusMode() {
@@ -136,7 +207,7 @@ struct CanvasRequest: Equatable {
         if let selection { selectedIDs = selection; selectedID = focus ?? selection.first }
         refreshLayoutAndSelection()
         let now = Date()
-        if let key = coalescingKey, var last = undoStack.last, last.coalescingKey == key,
+        if redoStack.isEmpty, let key = coalescingKey, var last = undoStack.last, last.coalescingKey == key,
            now.timeIntervalSince(last.timestamp) < 0.8,
            let merged = last.command.merged(with: command) {
             last.command = merged
@@ -145,12 +216,13 @@ struct CanvasRequest: Equatable {
         } else {
             undoStack.append(HistoryEntry(command: command, name: name, beforeSelection: beforeSelection, beforeFocus: beforeFocus,
                                           afterSelection: selectedIDs, afterFocus: selectedID, coalescingKey: coalescingKey, timestamp: now))
-            if undoStack.count > 200 { undoStack.removeFirst() }
+            if undoStack.count > Self.historyLimit { undoStack.removeFirst() }
         }
         redoStack.removeAll(); historyRevision += 1
         return true
     }
     private func refreshLayoutAndSelection() {
+        layoutRevision &+= 1
         layoutResult = LayoutEngine.layout(document)
         selectedIDs.formIntersection(layoutResult.frames.keys)
         if let id = selectedID, !selectedIDs.contains(id) { selectedID = selectedIDs.first }
@@ -161,21 +233,29 @@ struct CanvasRequest: Equatable {
         document = incoming; undoStack = []; redoStack = []; historyRevision += 1
         refreshLayoutAndSelection()
     }
-    func undo() {
-        guard let entry = undoStack.popLast() else { return }
+    func undo() { restoreHistory(steps: 1, forward: false) }
+    func redo() { restoreHistory(steps: 1, forward: true) }
+    func undo(steps: Int) { restoreHistory(steps: steps, forward: false) }
+    func redo(steps: Int) { restoreHistory(steps: steps, forward: true) }
+    private func restoreHistory(steps: Int, forward: Bool) {
+        let stack = forward ? redoStack : undoStack
+        let entries = Array(stack.suffix(min(max(0, steps), stack.count)).reversed())
+        guard let last = entries.last else { return }
         var candidate = document
-        do { try entry.command.inverse.apply(to: &candidate); try candidate.validate() }
-        catch { undoStack.append(entry); errorMessage = error.localizedDescription; return }
-        document = candidate; selectedIDs = entry.beforeSelection; selectedID = entry.beforeFocus
-        redoStack.append(entry); refreshLayoutAndSelection(); historyRevision += 1
-    }
-    func redo() {
-        guard let entry = redoStack.popLast() else { return }
-        var candidate = document
-        do { try entry.command.apply(to: &candidate); try candidate.validate() }
-        catch { redoStack.append(entry); errorMessage = error.localizedDescription; return }
-        document = candidate; selectedIDs = entry.afterSelection; selectedID = entry.afterFocus
-        undoStack.append(entry); refreshLayoutAndSelection(); historyRevision += 1
+        do {
+            for entry in entries { try (forward ? entry.command : entry.command.inverse).apply(to: &candidate) }
+            try candidate.validate()
+        } catch { errorMessage = error.localizedDescription; return }
+        if forward {
+            redoStack.removeLast(entries.count); undoStack.append(contentsOf: entries)
+            selectedIDs = last.afterSelection; selectedID = last.afterFocus
+        } else {
+            undoStack.removeLast(entries.count); redoStack.append(contentsOf: entries)
+            selectedIDs = last.beforeSelection; selectedID = last.beforeFocus
+        }
+        document = candidate
+        refreshLayoutAndSelection(); historyRevision += 1
+        request(.centerSelection)
     }
     func updateNode(_ id: UUID, key: String? = nil, _ mutation: (inout NodeProperties) -> Void) {
         guard let node = document.root.find(id) else { return }
@@ -243,9 +323,13 @@ struct CanvasRequest: Equatable {
     }
     private func selectionRoots(excludingRoot: Bool = false) -> [MindMapNode] {
         let selection = excludingRoot ? selectedIDs.subtracting([document.root.id]) : selectedIDs
-        return document.allNodes.filter { node in
-            selection.contains(node.id) && !(document.root.ancestors(of: node.id) ?? []).contains(where: { selection.contains($0) })
+        var result: [MindMapNode] = []
+        func visit(_ node: MindMapNode) {
+            if selection.contains(node.id) { result.append(node); return }
+            for child in node.children { visit(child) }
         }
+        visit(document.root)
+        return result
     }
     func deleteSelected() {
         let roots = selectionRoots(excludingRoot: true)
@@ -303,10 +387,70 @@ struct CanvasRequest: Equatable {
         }
         execute(.batch(commands), name: "移动主题")
     }
+    func canReorderSelection(relativeTo targetID: UUID) -> Bool {
+        let roots = selectionRoots()
+        guard !roots.isEmpty, !selectedIDs.contains(targetID),
+              let target = document.root.location(of: targetID) else { return false }
+        return roots.allSatisfy { document.root.location(of: $0.id)?.parentID == target.parentID }
+    }
+    func makeDragSession() -> NodeDragSession? {
+        let roots = selectionRoots()
+        guard !roots.isEmpty, !roots.contains(where: { $0.id == document.root.id }) else { return nil }
+        let excluded = Set(roots.flatMap { $0.flattened().map(\.id) })
+        let targets = layoutResult.visibleNodes.compactMap { node -> NodeDragSession.Target? in
+            guard !excluded.contains(node.id), let frame = layoutResult.frames[node.id] else { return nil }
+            return NodeDragSession.Target(id: node.id, title: node.title, frame: frame, isRoot: node.id == document.root.id)
+        }
+        return NodeDragSession(revision: historyRevision, title: roots.first?.title ?? "主题", count: roots.count,
+            targets: targets, verticalSiblings: document.layout == .organization)
+    }
+    func dropSelection(on targetID: UUID, asChild: Bool = false) {
+        if asChild || !canReorderSelection(relativeTo: targetID) {
+            moveSelection(relativeTo: NodeDropTarget(id: targetID, placement: .inside))
+        } else if let source = selectedID.flatMap({ document.root.location(of: $0) }),
+                  let target = document.root.location(of: targetID) {
+            moveSelection(relativeTo: NodeDropTarget(id: targetID, placement: source.index < target.index ? .after : .before))
+        }
+    }
+    func moveSelection(relativeTo target: NodeDropTarget) {
+        let roots = selectionRoots()
+        guard !roots.isEmpty, !roots.contains(where: { $0.find(target.id) != nil || $0.id == document.root.id }) else { return }
+        let parentID: UUID
+        if target.placement == .inside { parentID = target.id }
+        else {
+            guard let location = document.root.location(of: target.id) else { return }
+            parentID = location.parentID
+        }
+        guard let parent = document.root.find(parentID) else { return }
+        var candidate = document
+        var commands: [EditCommand] = []
+        func apply(_ command: EditCommand) throws { try command.apply(to: &candidate); commands.append(command) }
+        do {
+            if parent.isCollapsed {
+                var after = NodeProperties(parent); after.isCollapsed = false
+                try apply(.update(parentID, before: NodeProperties(parent), after: after))
+            }
+            for node in roots {
+                guard let from = candidate.root.location(of: node.id) else { return }
+                try apply(.remove(node, from))
+            }
+            let index: Int
+            if target.placement == .inside { index = candidate.root.find(parentID)?.children.count ?? 0 }
+            else {
+                guard let location = candidate.root.location(of: target.id) else { return }
+                index = location.index + (target.placement == .after ? 1 : 0)
+            }
+            for (offset, node) in roots.enumerated() { try apply(.insert(node, NodeLocation(parentID: parentID, index: index + offset))) }
+        } catch { errorMessage = error.localizedDescription; return }
+        execute(.batch(commands), name: target.placement == .inside ? "移为子主题" : "拖动排序")
+    }
     func reorderSelected(by delta: Int) {
         guard let id = selectedID, let from = document.root.location(of: id), let parent = document.root.find(from.parentID) else { return }
-        let index = from.index + delta
-        guard parent.children.indices.contains(index) else { return }
+        let count = parent.children.count
+        guard count > 1 else { return }
+        let offset = delta % count
+        let index = (from.index + offset + count) % count
+        guard index != from.index else { return }
         execute(.move(id, from: from, to: NodeLocation(parentID: from.parentID, index: index)), name: "调整主题顺序")
     }
     func navigate(dx: CGFloat, dy: CGFloat, extending: Bool = false) {

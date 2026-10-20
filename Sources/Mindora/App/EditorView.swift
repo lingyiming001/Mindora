@@ -134,9 +134,29 @@ struct EditorView: View {
         }
         ToolbarItemGroup(placement: .primaryAction) {
             Button { model.finishEditing?(); model.undo() } label: { Label("撤销", systemImage: "arrow.uturn.backward") }
-                .disabled(!model.canUndo).help("撤销（⌘Z）")
+                .disabled(!model.canUndo).help("回退：\(model.undoName) · 可回退 \(model.undoCount) 步（⌘Z）")
             Button { model.finishEditing?(); model.redo() } label: { Label("重做", systemImage: "arrow.uturn.forward") }
-                .disabled(!model.canRedo).help("重做（⇧⌘Z）")
+                .disabled(!model.canRedo).help("前进：\(model.redoName) · 可前进 \(model.redoCount) 步（⇧⌘Z）")
+            Menu {
+                Section("可回退 \(model.undoCount) 步 · 可前进 \(model.redoCount) 步") {
+                    Menu("回退到…") {
+                        ForEach(Array(model.undoSteps.prefix(50).enumerated()), id: \.offset) { step in
+                            Button("回退 \(step.offset + 1) 步 · \(step.element)") {
+                                model.finishEditing?(); model.undo(steps: step.offset + 1)
+                            }
+                        }
+                    }.disabled(!model.canUndo)
+                    Menu("前进到…") {
+                        ForEach(Array(model.redoSteps.prefix(50).enumerated()), id: \.offset) { step in
+                            Button("前进 \(step.offset + 1) 步 · \(step.element)") {
+                                model.finishEditing?(); model.redo(steps: step.offset + 1)
+                            }
+                        }
+                    }.disabled(!model.canRedo)
+                }
+                Text("当前导图最多保留 400 步；菜单列出最近 50 步")
+            } label: { Label("操作历史", systemImage: "clock.arrow.circlepath") }
+                .help("操作历史：多步回退与前进")
             Menu {
                 Button("添加子主题    Tab / ⌘K") { model.finishEditing?(); model.addChild() }
                 Button("添加同级主题    ⇧⌘K") { model.finishEditing?(); model.addSibling() }

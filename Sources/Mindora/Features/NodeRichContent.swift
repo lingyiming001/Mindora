@@ -12,13 +12,13 @@ struct NodeRichContent: View {
                 Button { model.insertContent(.link) } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "link").frame(width: 22)
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(node.link.isEmpty ? "添加网址" : "编辑网址").fontWeight(.medium)
                             Text(node.link.isEmpty ? "关联文档、页面或资料" : node.link).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer(minLength: 0)
                         Text("⌥⌘K").font(.caption).foregroundStyle(.secondary)
-                    }.padding(.vertical, 5).contentShape(Rectangle())
+                    }.padding(.vertical, 2).contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 if let url = Self.webURL(node.link) {
                     HStack {
@@ -31,14 +31,14 @@ struct NodeRichContent: View {
                 Button { model.insertContent(.code) } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "chevron.left.forwardslash.chevron.right").frame(width: 22)
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(node.code.isEmpty ? "添加代码块" : "编辑代码块").fontWeight(.medium)
                             Text(node.code.isEmpty ? "粘贴片段，保留缩进" : "\(node.codeLanguage.isEmpty ? "纯文本" : node.codeLanguage) · \(node.code.components(separatedBy: "\n").count) 行")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 0)
                         Text("⌥⌘C").font(.caption).foregroundStyle(.secondary)
-                    }.padding(.vertical, 5).contentShape(Rectangle())
+                    }.padding(.vertical, 2).contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 if !node.code.isEmpty {
                     HStack {
@@ -53,8 +53,11 @@ struct NodeRichContent: View {
                     Button("添加图片", systemImage: "photo.badge.plus") { importAttachments(imagesOnly: true) }
                     Button("添加文件", systemImage: "paperclip") { importAttachments(imagesOnly: false) }
                 }.controlSize(.small)
-                Text("随导图保存 · 单文件最多 3 MB，整份导图附件最多 8 MB，每个主题最多 16 项。")
-                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Text(node.attachments.isEmpty ? "暂无附件" : "\(node.attachments.count) 个附件")
+                    Spacer()
+                    Text("单文件 ≤ 3 MB").help("附件随导图保存；整份导图最多 8 MB，每个主题最多 16 项。")
+                }.font(.system(size: 10)).foregroundStyle(.tertiary)
                 ForEach(node.attachments) { attachment in
                     AttachmentCard(attachment: attachment, export: { exportAttachment(attachment) }, remove: {
                         model.updateNode(nodeID) { $0.attachments.removeAll { $0.id == attachment.id } }
@@ -123,7 +126,7 @@ private struct AttachmentCard: View {
             }
             HStack(alignment: .top) {
                 Image(systemName: preview == nil ? "doc" : "photo").foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(attachment.name).font(.system(size: 11, weight: .medium)).lineLimit(2)
                     Text(ByteCountFormatter.string(fromByteCount: Int64(attachment.data.count), countStyle: .file))
                         .font(.caption2).foregroundStyle(.secondary)

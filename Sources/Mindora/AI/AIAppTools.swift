@@ -60,7 +60,7 @@ import AppKit
             try map.validate(); model.replaceDocument(map, name: "AI 修改主题")
         case "mindora_page_style":
             let model = try editor(), patch = try AIJSON.object(Data(try text(args, "style_json").utf8))
-            let keys: Set<String> = ["fontSize", "textAlignment", "bold", "italic", "width", "height", "colorHex", "textColorHex", "backgroundHex", "borderWidth", "cornerRadius"]
+            let keys: Set<String> = ["fontSize", "textAlignment", "bold", "italic", "width", "height", "colorHex", "textColorHex", "backgroundHex", "borderWidth", "cornerRadius", "verticalAlignment", "underline", "strikethrough", "borderColorHex", "dashedBorder"]
             guard !patch.isEmpty, Set(patch.keys).isSubset(of: keys) else { throw AIError.message("无效的页面样式字段") }
             func merge(_ existing: NodeStyle?) throws -> NodeStyle {
                 var object = try AIJSON.object(JSONEncoder().encode(existing ?? NodeStyle()))

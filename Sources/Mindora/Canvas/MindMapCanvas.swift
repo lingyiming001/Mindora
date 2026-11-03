@@ -365,6 +365,12 @@ struct MindMapCanvas: NSViewRepresentable {
         editor.wantsLayer = true; editor.layer?.borderWidth = 0
         editor.layer?.backgroundColor = NSColor.clear.cgColor
         editor.string = initialText ?? item.title
+        let decorations: [NSAttributedString.Key: Any] = [
+            .underlineStyle: item.style?.underline == true ? NSUnderlineStyle.single.rawValue : 0,
+            .strikethroughStyle: item.style?.strikethrough == true ? NSUnderlineStyle.single.rawValue : 0
+        ]
+        editor.textStorage?.addAttributes(decorations, range: NSRange(location: 0, length: (editor.string as NSString).length))
+        editor.typingAttributes.merge(decorations) { _, new in new }
         editor.alignment = (item.style?.textAlignment ?? .center).appKit
         editor.onFinish = { [weak self] commit in self?.endEditing(commit: commit) }
         editor.onResign = { [weak self, weak editor] in
@@ -382,9 +388,10 @@ struct MindMapCanvas: NSViewRepresentable {
     }
     private func repositionEditor() {
         guard let editor = inlineEditor, let id = editingID, let frame = model.layoutResult.frames[id] else { return }
-        guard let node = model.document.root.find(id) else { return }
+        guard var node = model.document.root.find(id) else { return }
+        node.title = editor.string
         let isRoot = id == model.document.root.id
-        // Use exactly the same title inset as drawing; never recenter or shift the editor.
+        // Keep the live text centered with the same geometry used for drawing.
         let titleRect = CanvasRenderer.titleTextRect(node, frame: frame, isRoot: isRoot)
         var screen = model.viewport.screenRect(titleRect, in: bounds.size)
         screen.size.width = max(1, screen.width)

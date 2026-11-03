@@ -130,15 +130,16 @@ enum ExportFormat: String, CaseIterable, Identifiable {
             let radius = CGFloat(node.style?.cornerRadius ?? (root ? 15 : 11))
             let border = CGFloat(node.style?.borderWidth ?? 1)
             let shadowAttribute = node.style?.shadow == false ? "" : #" filter="url(#node-shadow)""#
-            result += "<rect x=\"\(n(frame.minX))\" y=\"\(n(frame.minY))\" width=\"\(n(frame.width))\" height=\"\(n(frame.height))\" rx=\"\(n(radius))\" fill=\"\(fill)\" stroke=\"\(color(node.id))\" stroke-width=\"\(n(border))\"\(shadowAttribute)/>\n"
+            result += "<rect x=\"\(n(frame.minX))\" y=\"\(n(frame.minY))\" width=\"\(n(frame.width))\" height=\"\(n(frame.height))\" rx=\"\(n(radius))\" fill=\"\(fill)\" stroke=\"#\(node.style?.borderColorHex ?? String(color(node.id).dropFirst()))\" stroke-width=\"\(n(border))\"\(node.style?.dashedBorder == true ? " stroke-dasharray=\"5 3\"" : "")\(shadowAttribute)/>\n"
             let fontSize = CGFloat(node.style?.fontSize ?? (root ? 17 : 14))
             let title = node.title.isEmpty ? "无标题" : node.title
             let lines = wrappedLines(title, width: frame.width - 34, font: LayoutEngine.font(node, isRoot: root))
             let alignment = node.style?.textAlignment ?? .center
             let anchor = alignment == .left ? "start" : alignment == .right ? "end" : "middle"
             let textX = alignment == .left ? frame.minX + 17 : alignment == .right ? frame.maxX - 17 : frame.midX
-            let startY = frame.minY + LayoutEngine.titleSize(node, isRoot: root).height / 2 - CGFloat(lines.count - 1) * fontSize * 0.65 + fontSize * 0.35
-            result += "<text text-anchor=\"\(anchor)\" font-family=\"-apple-system, BlinkMacSystemFont, sans-serif\" font-size=\"\(n(fontSize))\" fill=\"\(textColor)\" font-weight=\"\(node.style?.bold == true ? "700" : (root ? "600" : "500"))\" font-style=\"\(node.style?.italic == true ? "italic" : "normal")\">"
+            let startY = CanvasRenderer.titleTextRect(node, frame: frame, isRoot: root).midY - CGFloat(lines.count - 1) * fontSize * 0.65 + fontSize * 0.35
+            let decorations = [node.style?.underline == true ? "underline" : "", node.style?.strikethrough == true ? "line-through" : ""].filter { !$0.isEmpty }.joined(separator: " ")
+            result += "<text text-decoration=\"\(decorations.isEmpty ? "none" : decorations)\" text-anchor=\"\(anchor)\" font-family=\"-apple-system, BlinkMacSystemFont, sans-serif\" font-size=\"\(n(fontSize))\" fill=\"\(textColor)\" font-weight=\"\(node.style?.bold == true ? "700" : (root ? "600" : "500"))\" font-style=\"\(node.style?.italic == true ? "italic" : "normal")\">"
             for (index, line) in lines.enumerated() {
                 result += "<tspan x=\"\(n(textX))\" y=\"\(n(startY + CGFloat(index) * fontSize * 1.3))\">\(MapInterchange.xmlEscape(line))</tspan>"
             }

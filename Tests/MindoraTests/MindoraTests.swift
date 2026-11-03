@@ -353,6 +353,146 @@ final class MindoraTests: XCTestCase {
         XCTAssertNotNil(model.layoutResult.frames[model.selectedID!])
         model.undo(); XCTAssertEqual(model.document, document)
     }
+    @MainActor func testInspectorPropertiesRoundTripAndBatchUndo() throws {
+        let original = MapTemplate.project.document
+        let model = EditorModel(document: original)
+        model.select(original.root.children[0].id, extending: true)
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        model.updateSelectedProperties("修改属性") {
+            $0.assignee = "设计团队"; $0.startDate = start; $0.dueDate = start.addingTimeInterval(86400)
+            var style = $0.style ?? NodeStyle()
+            style.verticalAlignment = .bottom; style.underline = true; style.strikethrough = true
+            style.borderColorHex = "FF3366"; style.dashedBorder = true
+            $0.style = style
+        }
+        model.searchText = "设计团队"
+        XCTAssertEqual(model.searchMatches.count, 2)
+        XCTAssertEqual(model.document.root.assignee, "设计团队")
+        XCTAssertEqual(model.document.root.children[0].dueDate, start.addingTimeInterval(86400))
+        XCTAssertEqual(try MapInterchange.decodeJSON(MapInterchange.encodeJSON(model.document)), model.document)
+        let svg = try XCTUnwrap(String(data: ImportExportService.exportData(model.document, format: .svg), encoding: .utf8))
+        XCTAssertTrue(svg.contains("stroke-dasharray=\"5 3\""))
+        XCTAssertTrue(svg.contains("underline line-through"))
+        XCTAssertTrue(svg.contains("#FF3366"))
+        model.undo(); XCTAssertEqual(model.document, original)
+        model.redo(); XCTAssertEqual(model.document.root.style?.verticalAlignment, .bottom)
+        var invalid = model.document
+        invalid.nodes[0].dueDate = start.addingTimeInterval(-86400)
+        XCTAssertThrowsError(try invalid.validate())
+    }
+
+    @MainActor func testVerticalAlignmentWithinResizedNode() {
+        var node = MindMapNode(title: "主题")
+        let frame = CGRect(x: 30, y: 50, width: 240, height: 180)
+        node.style?.verticalAlignment = .top
+        let top = CanvasRenderer.titleTextRect(node, frame: frame, isRoot: false)
+        node.style?.verticalAlignment = .bottom
+        let bottom = CanvasRenderer.titleTextRect(node, frame: frame, isRoot: false)
+        XCTAssertEqual(top.minY, frame.minY + 12, accuracy: 0.5)
+        XCTAssertEqual(bottom.maxY, frame.maxY - 12, accuracy: 0.5)
+        XCTAssertGreaterThan(bottom.minY, top.maxY)
+    }
+
+    @MainActor func testDefaultNodeTextIsCenteredIncludingResizedNodes() {
+        var map = MindMapDocument()
+        AppPreferences.prepareNewMap(&map)
+        XCTAssertEqual(map.root.style?.textAlignment, .center)
+        let model = EditorModel(document: map)
+        model.addChild()
+        XCTAssertEqual(model.selectedNode?.style?.textAlignment, .center)
+        for title in ["未命名导图", "第一行\n第二行"] {
+            var node = MindMapNode(title: title)
+            node.style?.height = 180
+            let frame = CGRect(x: 40, y: 60, width: 300, height: 180)
+            let rect = CanvasRenderer.titleTextRect(node, frame: frame, isRoot: true)
+            XCTAssertEqual(rect.midX, frame.midX, accuracy: 0.5)
+            XCTAssertEqual(rect.midY, frame.midY, accuracy: 0.5)
+        }
+    }
+
+    func testDiscoverWorkspacesRestoresMetadataAtNewLocation() throws {
+        let manager = FileManager.default
+        let base = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let folder = base.appendingPathComponent("research", isDirectory: true)
+        try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: base) }
+        try manager.createDirectory(at: base.appendingPathComponent("ordinary-folder"), withIntermediateDirectories: true)
+        let record = LibraryWorkspace(id: UUID(), name: "研究", path: "/old/location", bookmark: nil,
+                                      iconSymbol: "book.fill", iconText: "研", introduction: "项目研究", iconColorHex: "2C8A78")
+        try JSONEncoder().encode(record).write(to: folder.appendingPathComponent(".mindora-workspace.json"))
+        try manager.createSymbolicLink(at: base.appendingPathComponent("linked-space"), withDestinationURL: folder)
+        let found = try WorkspaceCatalog.discoverableWorkspaces(in: base)
+        XCTAssertEqual(found.count, 1)
+        XCTAssertEqual(found[0].id, record.id)
+        XCTAssertEqual(found[0].name, "研究")
+        XCTAssertEqual(URL(fileURLWithPath: found[0].path).resolvingSymlinksInPath(), folder.resolvingSymlinksInPath())
+        XCTAssertEqual(found[0].iconText, "研")
+        XCTAssertEqual(found[0].introduction, "项目研究")
+        XCTAssertNil(found[0].bookmark)
+    }
+
+    func testWorkspaceTrashMovesWholeSpaceAndPreservesNestedSpaces() throws {
+        let manager = FileManager.default
+        let temp = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try manager.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: temp) }
+        let source = temp.appendingPathComponent("library", isDirectory: true)
+        let child = source.appendingPathComponent("other-space", isDirectory: true)
+        try manager.createDirectory(at: child, withIntermediateDirectories: true)
+        let ownFile = source.appendingPathComponent("own.mindora")
+        let childFile = child.appendingPathComponent("other.mindora")
+        try Data("own".utf8).write(to: ownFile)
+        try Data("other".utf8).write(to: childFile)
+        let payload = temp.appendingPathComponent("trash", isDirectory: true)
+        try WorkspaceCatalog.moveWorkspaceToTrash(source: source, payload: payload, protecting: [source, child])
+        XCTAssertEqual(try Data(contentsOf: childFile), Data("other".utf8))
+        XCTAssertFalse(manager.fileExists(atPath: ownFile.path))
+        XCTAssertEqual(try Data(contentsOf: payload.appendingPathComponent("own.mindora")), Data("own".utf8))
+        let secondPayload = temp.appendingPathComponent("trash2", isDirectory: true)
+        try WorkspaceCatalog.moveWorkspaceToTrash(source: child, payload: secondPayload, protecting: [source])
+        XCTAssertFalse(manager.fileExists(atPath: child.path))
+        XCTAssertEqual(try Data(contentsOf: secondPayload.appendingPathComponent("other.mindora")), Data("other".utf8))
+        // Restoring a complete payload also restores its contents unchanged.
+        try manager.moveItem(at: secondPayload, to: child)
+        XCTAssertEqual(try Data(contentsOf: childFile), Data("other".utf8))
+    }
+
+    func testWorkspaceDirectoryUsesConfiguredRootAndAvoidsExistingFolders() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let first = WorkspaceCatalog.availableWorkspaceDirectory(in: base, name: "研究")
+        XCTAssertEqual(first.deletingLastPathComponent(), base)
+        XCTAssertEqual(first.lastPathComponent, "研究")
+        try FileManager.default.createDirectory(at: first, withIntermediateDirectories: false)
+        let second = WorkspaceCatalog.availableWorkspaceDirectory(in: base, name: "研究")
+        XCTAssertEqual(second.lastPathComponent, "研究 2")
+        XCTAssertEqual(WorkspaceCatalog.availableWorkspaceDirectory(in: base, name: "../研究").deletingLastPathComponent(), base)
+        XCTAssertEqual(WorkspaceCatalog.availableWorkspaceDirectory(in: base, name: "..").lastPathComponent, "工作空间")
+    }
+
+    @MainActor func testFirstRootTitleRenameIsNotRearmedByUndo() {
+        let model = EditorModel(document: MapTemplate.project.document)
+        var naming = FirstRootTitleRename()
+        var previous = model.document.root.title
+        var fileNames: [String] = []
+        model.documentDidChange = { updated in
+            if let name = naming.consume(previous: previous, updated: updated.root.title) {
+                fileNames.append(name)
+            }
+            previous = updated.root.title
+        }
+        let childID = model.document.root.children[0].id
+        model.updateTitle("子主题变化", for: childID)
+        XCTAssertTrue(fileNames.isEmpty)
+        model.updateTitle("项目计划", for: model.document.root.id)
+        model.undo()
+        model.redo()
+        model.updateTitle("新计划", for: model.document.root.id)
+        XCTAssertEqual(fileNames, ["项目计划"])
+        XCTAssertEqual(model.document.root.title, "新计划")
+    }
+
     @MainActor func testRootRenameUndoRestoresFullDocument() {
         let document = MindMapDocument(), model = EditorModel(document: MindMapDocument())
         model.replaceFromFile(document)

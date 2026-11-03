@@ -120,12 +120,22 @@ import UniformTypeIdentifiers
         }
         let nextEditor = EditorModel(document: incoming.map)
         nextEditor.editingTransactionDidBegin = { [weak self] in self?.autosaveTask?.cancel(); self?.autosaveTask = nil }
+        var titleRename = FirstRootTitleRename()
         nextEditor.documentDidChange = { [weak self, weak incoming] updated in
             guard let self, let incoming, self.document === incoming else { return }
+            let renameTitle = titleRename.consume(previous: incoming.map.root.title, updated: updated.root.title)
             incoming.map = updated
             incoming.updateChangeCount(.changeDone)
             self.saveStatus = "等待自动保存"; self.updateWindow()
             self.scheduleAutosave()
+            if let renameTitle, let url = incoming.fileURL {
+                do {
+                    try incoming.saveImmediately()
+                    try self.library.renameForFirstRootTitle(url, title: renameTitle)
+                } catch {
+                    self.errorMessage = "同步文件名失败，主题内容已保留：\(error.localizedDescription)"
+                }
+            }
         }
         incoming.didWrite = { [weak self, weak incoming] in
             guard let self, let incoming, self.document === incoming else { return }
@@ -291,5 +301,16 @@ import UniformTypeIdentifiers
     override func forwardingTarget(for selector: Selector!) -> Any? {
         if original?.responds(to: selector) == true { return original }
         return super.forwardingTarget(for: selector)
+    }
+}
+
+/// File naming is a session action, deliberately independent of content undo/redo.
+struct FirstRootTitleRename {
+    private var consumed = false
+
+    mutating func consume(previous: String, updated: String) -> String? {
+        guard !consumed, previous != updated else { return nil }
+        consumed = true
+        return updated
     }
 }

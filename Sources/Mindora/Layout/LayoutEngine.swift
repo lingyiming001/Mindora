@@ -23,7 +23,7 @@ enum LayoutEngine {
     static let siblingGap: CGFloat = 22
 
     static func titleSize(_ node: MindMapNode, isRoot: Bool) -> CGSize {
-        let key = "\(node.id)|\(isRoot)|\(node.style?.fontSize ?? 0)|\(node.style?.bold ?? false)|\(node.style?.italic ?? false)|\(node.hasRichContent)|\(node.style?.width ?? 0)|\(node.priority > 0 || node.progress != nil || !node.tags.isEmpty || !node.note.isEmpty)|\(node.title)" as NSString
+        let key = "\(node.id)|\(isRoot)|\(node.style?.fontSize ?? 0)|\(node.style?.bold ?? false)|\(node.style?.italic ?? false)|\(node.hasRichContent)|\(node.style?.width ?? 0)|\(node.hasMetadata)|\(node.title)" as NSString
         if let cached = titleCache.object(forKey: key) { return cached.sizeValue }
         let font = Self.font(node, isRoot: isRoot)
         let text = node.title.isEmpty ? "无标题" : node.title
@@ -36,7 +36,7 @@ enum LayoutEngine {
         let automatic = min(720, max(node.hasRichContent ? 310 : (isRoot ? 150 : 126), ceil(longestLine) + 36))
         let width = node.style?.width.map { CGFloat($0) } ?? automatic
         let rect = (text as NSString).boundingRect(with: CGSize(width: width - 34, height: CGFloat.greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
-        let hasMetadata = node.priority > 0 || node.progress != nil || !node.tags.isEmpty || !node.note.isEmpty
+        let hasMetadata = node.hasMetadata
         let size = CGSize(width: width, height: max(isRoot ? 54 : 44, ceil(rect.height) + 28 + (hasMetadata ? 19 : 0)))
         titleCache.setObject(NSValue(size: size), forKey: key, cost: key.length * 2 + 64)
         return size

@@ -45,6 +45,10 @@ struct MindMapDocument: Codable, Equatable {
                   node.progress == nil || (0...100).contains(node.progress!),
                   node.style?.fontSize == nil || (10...36).contains(node.style!.fontSize!),
                   node.style?.colorHex == nil || (node.style!.colorHex!.count == 6 && node.style!.colorHex!.allSatisfy({ $0.isHexDigit })) else { throw DocumentError.invalidTree }
+            guard node.assignee.count <= 200,
+                  node.startDate == nil || node.startDate!.timeIntervalSinceReferenceDate.isFinite,
+                  node.dueDate == nil || node.dueDate!.timeIntervalSinceReferenceDate.isFinite else { throw DocumentError.invalidTree }
+            if let start = node.startDate, let due = node.dueDate, start > due { throw DocumentError.invalidImport("截止日期不能早于开始日期。") }
             guard node.link.count <= 4096, node.code.count <= 100_000, node.codeLanguage.count <= 32,
                   node.codeLanguage.allSatisfy({ $0.isLetter || $0.isNumber || "+-#".contains($0) }),
                   node.attachments.count <= 16, Set(node.attachments.map(\.id)).count == node.attachments.count else { throw DocumentError.invalidTree }
@@ -55,7 +59,7 @@ struct MindMapDocument: Codable, Equatable {
                       !attachment.name.contains("/"), !attachment.name.contains("\\"), attachment.typeIdentifier.count <= 200 else { throw DocumentError.invalidTree }
             }
             if let style = node.style {
-                for hex in [style.textColorHex, style.backgroundHex].compactMap({ $0 }) {
+                for hex in [style.textColorHex, style.backgroundHex, style.borderColorHex].compactMap({ $0 }) {
                     guard hex.count == 6, hex.allSatisfy({ $0.isHexDigit }) else { throw DocumentError.invalidTree }
                 }
                 if let height = style.height, !(44...2400).contains(height) { throw DocumentError.invalidTree }
@@ -106,6 +110,10 @@ struct MindMapNode: Codable, Identifiable, Equatable {
     var tags: [String] = []
     var priority = 0
     var progress: Int?
+    var assignee = ""
+    var startDate: Date?
+    var dueDate: Date?
+    var hasMetadata: Bool { priority > 0 || progress != nil || !tags.isEmpty || !note.isEmpty || !assignee.isEmpty || dueDate != nil }
     var link = ""
     var code = ""
     var codeLanguage = ""
@@ -114,7 +122,7 @@ struct MindMapNode: Codable, Identifiable, Equatable {
 
     init(id: UUID = UUID(), title: String, children: [MindMapNode] = []) {
         self.id = id; self.title = title; self.children = children
-        self.style = NodeStyle(textAlignment: .left)
+        self.style = NodeStyle(textAlignment: .center)
     }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -125,6 +133,9 @@ struct MindMapNode: Codable, Identifiable, Equatable {
         note = try values.decodeIfPresent(String.self, forKey: .note) ?? ""
         style = try values.decodeIfPresent(NodeStyle.self, forKey: .style)
         tags = try values.decodeIfPresent([String].self, forKey: .tags) ?? []
+        assignee = try values.decodeIfPresent(String.self, forKey: .assignee) ?? ""
+        startDate = try values.decodeIfPresent(Date.self, forKey: .startDate)
+        dueDate = try values.decodeIfPresent(Date.self, forKey: .dueDate)
         priority = try values.decodeIfPresent(Int.self, forKey: .priority) ?? 0
         progress = try values.decodeIfPresent(Int.self, forKey: .progress)
         link = try values.decodeIfPresent(String.self, forKey: .link) ?? ""
@@ -152,6 +163,17 @@ enum NodeTextAlignment: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum NodeVerticalAlignment: String, Codable, CaseIterable, Identifiable {
+    case top, center, bottom
+    var id: String { rawValue }
+    var label: String {
+        switch self { case .top: "顶部"; case .center: "居中"; case .bottom: "底部" }
+    }
+    var symbol: String {
+        switch self { case .top: "align.vertical.top"; case .center: "align.vertical.center"; case .bottom: "align.vertical.bottom" }
+    }
+}
+
 struct NodeStyle: Codable, Equatable {
     var colorHex: String?
     var fontSize: Double?
@@ -165,6 +187,11 @@ struct NodeStyle: Codable, Equatable {
     var textAlignment: NodeTextAlignment? = nil
     var width: Double? = nil
     var height: Double? = nil
+    var verticalAlignment: NodeVerticalAlignment? = nil
+    var underline: Bool? = nil
+    var strikethrough: Bool? = nil
+    var borderColorHex: String? = nil
+    var dashedBorder: Bool? = nil
 }
 
 struct NodeProperties: Equatable {
@@ -173,6 +200,9 @@ struct NodeProperties: Equatable {
     var tags: [String]
     var priority: Int
     var progress: Int?
+    var assignee: String
+    var startDate: Date?
+    var dueDate: Date?
     var style: NodeStyle?
     var isCollapsed: Bool
     var link: String
@@ -183,11 +213,13 @@ struct NodeProperties: Equatable {
     init(_ node: MindMapNode) {
         title = node.title; note = node.note; tags = node.tags
         priority = node.priority; progress = node.progress; style = node.style; isCollapsed = node.isCollapsed
+        assignee = node.assignee; startDate = node.startDate; dueDate = node.dueDate
         link = node.link; code = node.code; codeLanguage = node.codeLanguage; attachments = node.attachments
     }
     func apply(to node: inout MindMapNode) {
         node.title = title; node.note = note; node.tags = tags
         node.priority = priority; node.progress = progress; node.style = style; node.isCollapsed = isCollapsed
+        node.assignee = assignee; node.startDate = startDate; node.dueDate = dueDate
         node.link = link; node.code = code; node.codeLanguage = codeLanguage; node.attachments = attachments
     }
 }

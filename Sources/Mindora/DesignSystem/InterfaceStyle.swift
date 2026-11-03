@@ -3,7 +3,7 @@ import SwiftUI
 /// Shared window chrome; document colors remain in MapPalette.
 enum InterfaceStyle {
     static let sidebarWidth: CGFloat = 224
-    static let inspectorWidth: CGFloat = 320
+    static let inspectorWidth: CGFloat = 340
     static let divider = Color(nsColor: .separatorColor).opacity(0.45)
     static let panel = Color(nsColor: .windowBackgroundColor)
     static let surface = Color(nsColor: .textBackgroundColor)
@@ -37,9 +37,8 @@ struct InspectorSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
             content
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
-            .background(InterfaceStyle.surface, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(InterfaceStyle.divider, lineWidth: 0.5))
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 16)
+            .overlay(alignment: .bottom) { Rectangle().fill(InterfaceStyle.divider).frame(height: 0.5) }
     }
 }
 
@@ -76,5 +75,40 @@ private struct SidebarHoverFeedback: ViewModifier {
 extension View {
     func sidebarHoverFeedback(tint: Color = InterfaceStyle.accent) -> some View {
         modifier(SidebarHoverFeedback(tint: tint))
+    }
+}
+
+struct InspectorSwitch: View {
+    let title: String
+    @Binding var isOn: Bool
+    init(_ title: String, isOn: Binding<Bool>) { self.title = title; _isOn = isOn }
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer(minLength: 12)
+            Toggle(title, isOn: $isOn).labelsHidden().toggleStyle(.switch).controlSize(.small)
+        }
+    }
+}
+
+struct InspectorChoices<Value: Hashable>: View {
+    let title: String
+    @Binding var selection: Value
+    let options: [Value]
+    let label: (Value) -> String
+    var tint: Color = InterfaceStyle.accent
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(options, id: \.self) { option in
+                Button { selection = option } label: {
+                    Text(label(option)).font(.system(size: 11, weight: selection == option ? .semibold : .regular))
+                        .frame(maxWidth: .infinity).frame(height: 27)
+                        .foregroundStyle(selection == option ? tint : Color.secondary)
+                        .background(selection == option ? InterfaceStyle.surface : .clear, in: RoundedRectangle(cornerRadius: 5))
+                        .contentShape(RoundedRectangle(cornerRadius: 5))
+                }.buttonStyle(.plain).accessibilityAddTraits(selection == option ? .isSelected : [])
+            }
+        }.padding(3).background(InterfaceStyle.panel.opacity(0.7), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel(title)
     }
 }

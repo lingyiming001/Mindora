@@ -162,7 +162,7 @@ struct NodeDragSession {
         guard !query.isEmpty else { return [] }
         if let cache = searchCache, cache.query == query, cache.revision == historyRevision { return cache.matches }
         let matches = document.allNodes.filter { node in
-            node.title.localizedCaseInsensitiveContains(query) || node.note.localizedCaseInsensitiveContains(query)
+            node.title.localizedCaseInsensitiveContains(query) || node.note.localizedCaseInsensitiveContains(query) || node.assignee.localizedCaseInsensitiveContains(query)
                 || node.code.localizedCaseInsensitiveContains(query) || node.link.localizedCaseInsensitiveContains(query)
                 || node.attachments.contains(where: { $0.name.localizedCaseInsensitiveContains(query) })
                 || node.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
@@ -293,7 +293,7 @@ struct NodeDragSession {
     private func newNodeStyle() -> NodeStyle {
         var style = document.defaultNodeStyle ?? NodeStyle()
         if style.fontSize == nil { style.fontSize = AppPreferences.fontSize }
-        if style.textAlignment == nil { style.textAlignment = .left }
+        if style.textAlignment == nil { style.textAlignment = .center }
         return style
     }
     func updateTitle(_ title: String, for id: UUID) { updateNode(id) { $0.title = title } }

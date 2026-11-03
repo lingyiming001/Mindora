@@ -102,12 +102,12 @@ struct MindoraSettings: View {
                     Text("每个空间拥有独立的文件、收藏与回收箱。文档右键可移动到其他空间。").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("资料库位置") {
-                    Text(library.rootURL.path).textSelection(.enabled).font(.callout)
+                    Text(library.storageRootURL.path).textSelection(.enabled).font(.callout)
                     HStack {
                         Button("更改位置…") { library.chooseLocation() }
-                        Button("在 Finder 中显示") { library.revealInFinder(library.rootURL) }
+                        Button("在 Finder 中显示") { library.revealInFinder(library.storageRootURL) }
                     }
-                    Text("更改位置会保存并关闭当前导图，然后打开所选文件夹；不会搬移原有文件。外部文件打开时先复制进资料库，“另存为”只导出独立副本，不切换当前文件。").font(.caption).foregroundStyle(.secondary)
+                    Text("新建工作空间会在此目录下建立独立文件夹，切换空间不会改变资料库位置。更改位置会保存并关闭当前导图；已有空间和文件保留原位，不会自动搬移。").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("回收箱") {
                     LabeledContent("文件恢复") { Button("打开回收箱", systemImage: "trash") { openWindow(id: "recycle-bin") } }

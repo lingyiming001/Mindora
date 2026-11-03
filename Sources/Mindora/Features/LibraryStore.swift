@@ -36,6 +36,9 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
 
 @MainActor final class LibraryStore: ObservableObject {
     static let shared = LibraryStore()
+    @Published private(set) var storageRootURL: URL
+    private var storageScopedURL: URL?
+    private static let storageBookmarkKey = "Mindora.StorageRootBookmark"
     @Published private(set) var rootURL: URL
     @Published private(set) var recycleNotice = ""
     @Published private(set) var recycledItems: [RecycledItem] = []
@@ -90,6 +93,21 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
                 }
             }
         }
+        // Older versions persisted only the active workspace bookmark. Prefer the
+        // last explicitly added library over the generated UUID workspace folders.
+        let legacyRoot = WorkspaceCatalog.shared.workspaces.last { record in
+            !BackupStore.contains(URL(fileURLWithPath: record.path), in: base.deletingLastPathComponent())
+        }
+        let storageBookmark = UserDefaults.standard.data(forKey: Self.storageBookmarkKey)
+        var storageStale = false
+        let storage = storageBookmark.flatMap {
+            try? URL(resolvingBookmarkData: $0, options: [.withSecurityScope, .withoutUI], relativeTo: nil, bookmarkDataIsStale: &storageStale)
+        } ?? (try? legacyRoot?.resolve()) ?? base
+        storageRootURL = storage
+        if storage.startAccessingSecurityScopedResource() { storageScopedURL = storage }
+        if let bookmark = try? storage.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
+            UserDefaults.standard.set(bookmark, forKey: Self.storageBookmarkKey)
+        }
         rootURL = restored; currentFolderURL = restored; scopedURL = scope
         favoritePaths = Set(UserDefaults.standard.stringArray(forKey: "Mindora.LibraryFavorites." + restored.path) ?? UserDefaults.standard.stringArray(forKey: "Mindora.LibraryFavorites") ?? [])
         do { try manager.createDirectory(at: restored, withIntermediateDirectories: true) }
@@ -102,10 +120,15 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
     func contains(_ url: URL) -> Bool {
         let root = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
         let path = url.resolvingSymlinksInPath().standardizedFileURL.path
-        return path == root || path.hasPrefix(root + "/")
+        guard path == root || path.hasPrefix(root + "/") else { return false }
+        return !WorkspaceCatalog.shared.workspaces.contains { record in
+            let other = ((try? record.resolve()) ?? URL(fileURLWithPath: record.path)).resolvingSymlinksInPath().standardizedFileURL.path
+            return other != root && other.hasPrefix(root + "/") && (path == other || path.hasPrefix(other + "/"))
+        }
     }
     func reload() {
         guard !isSuspended else { return }
+        WorkspaceCatalog.shared.discoverWorkspaces(in: storageRootURL)
         // One scan at a time. Bursts coalesce into one follow-up scan.
         guard !isLoading else { reloadPending = true; return }
         isLoading = true
@@ -113,9 +136,11 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
             repeat {
                 reloadPending = false
                 let root = rootURL, backupFolder = BackupStore.shared.folderURL
+                let workspaceFolders = WorkspaceCatalog.shared.workspaces.compactMap { try? $0.resolve() }
+                    .filter { $0.standardizedFileURL != root.standardizedFileURL }
                 do {
                     try await Task.sleep(for: .milliseconds(120))
-                    let worker = Task.detached(priority: .utility) { try Self.scan(root, excluding: backupFolder) }
+                    let worker = Task.detached(priority: .utility) { try Self.scan(root, excluding: backupFolder, workspaceFolders: workspaceFolders) }
                     scanTask = worker
                     let result = try await worker.value
                     guard !Task.isCancelled else { return }
@@ -165,18 +190,18 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
         else { expandedFolders.insert(url) }
     }
     func selectItem(_ url: URL) { selectedItemURL = url }
-    private nonisolated static func scan(_ root: URL, excluding backupFolder: URL, depth: Int = 0) throws -> [LibraryItem] {
+    private nonisolated static func scan(_ root: URL, excluding backupFolder: URL, workspaceFolders: [URL] = [], depth: Int = 0) throws -> [LibraryItem] {
         try Task.checkCancellation()
         guard depth < 64, !BackupStore.contains(root, in: backupFolder) else { return [] }
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .isRegularFileKey, .contentModificationDateKey, .fileSizeKey]
         let urls = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])
         return try urls.compactMap { url in
             try Task.checkCancellation()
-            guard !BackupStore.contains(url, in: backupFolder) else { return nil }
+            guard !BackupStore.contains(url, in: backupFolder), !workspaceFolders.contains(where: { $0.standardizedFileURL == url.standardizedFileURL }) else { return nil }
             let values = try url.resourceValues(forKeys: keys)
             guard values.isSymbolicLink != true else { return nil }
             if values.isDirectory == true {
-                return LibraryItem(url: url, isFolder: true, children: try scan(url, excluding: backupFolder, depth: depth + 1))
+                return LibraryItem(url: url, isFolder: true, children: try scan(url, excluding: backupFolder, workspaceFolders: workspaceFolders, depth: depth + 1))
             }
             guard values.isRegularFile == true, url.pathExtension.lowercased() == "mindora" else { return nil }
             return LibraryItem(url: url, isFolder: false, children: [], modified: values.contentModificationDate, bytes: values.fileSize)
@@ -198,9 +223,9 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
     func chooseLocation() {
         let panel = NSOpenPanel()
         panel.title = "选择资料库位置"
-        panel.message = "使用本机文件夹管理思维导图。文件会直接保存在选中的位置。"
+        panel.message = "设置统一的资料库根目录，新建工作空间会在此目录下建立独立文件夹。已有空间不会自动搬移。"
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
-        panel.directoryURL = rootURL; panel.prompt = "使用此文件夹"
+        panel.directoryURL = storageRootURL; panel.prompt = "使用此文件夹"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard !BackupStore.contains(url, in: BackupStore.shared.folderURL) else {
             errorMessage = "不能将备份目录用作资料库，请选择导图文件夹。"
@@ -208,12 +233,35 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
         }
         do {
             let bookmark = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-            if let existing = WorkspaceCatalog.shared.current(url) { _ = switchWorkspace(existing); return }
-            guard !WorkspaceCatalog.shared.overlaps(url) else { errorMessage = "工作空间目录不能相互包含。"; return }
-            guard activateWorkspaceFolder(url, bookmark: bookmark) else { return }
-            WorkspaceCatalog.shared.register(url, bookmark: bookmark)
+            let catalog = WorkspaceCatalog.shared
+            // A storage root may contain spaces, but must not be inside another space.
+            guard !catalog.workspaces.contains(where: { record in
+                let other = (try? record.resolve()) ?? URL(fileURLWithPath: record.path)
+                return other.standardizedFileURL != url.standardizedFileURL && BackupStore.contains(url, in: other)
+            }) else { errorMessage = "资料库根目录不能设在另一个工作空间内部。"; return }
+            guard WorkspaceStore.shared.showFolder() else { return }
+            setStorageRoot(url, bookmark: bookmark)
+            catalog.discoverWorkspaces(in: url)
+            if let existing = catalog.current(url) {
+                _ = switchWorkspace(existing)
+            } else if let first = catalog.workspaces.first(where: {
+                URL(fileURLWithPath: $0.path).deletingLastPathComponent().standardizedFileURL == url.standardizedFileURL
+            }) {
+                _ = switchWorkspace(first)
+            } else {
+                guard activateWorkspaceFolder(url, bookmark: bookmark) else { return }
+                catalog.register(url, bookmark: bookmark)
+            }
         } catch { errorMessage = "无法使用这个位置：\(error.localizedDescription)" }
     }
+    private func setStorageRoot(_ url: URL, bookmark: Data) {
+        let accessed = url.startAccessingSecurityScopedResource()
+        storageScopedURL?.stopAccessingSecurityScopedResource()
+        storageScopedURL = accessed ? url : nil
+        storageRootURL = url
+        UserDefaults.standard.set(bookmark, forKey: Self.storageBookmarkKey)
+    }
+
     @discardableResult private func activateWorkspaceFolder(_ url: URL, bookmark: Data) -> Bool {
         guard !BackupStore.contains(url, in: BackupStore.shared.folderURL),
               (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { errorMessage = "空间位置不可用，请检查文件夹和访问权限。"; return false }
@@ -308,6 +356,14 @@ enum EditorSidebarSection: String, CaseIterable, Identifiable {
             currentFolderURL = url; revealFolder(url); reload()
         } catch { errorMessage = error.localizedDescription }
     }
+    func renameForFirstRootTitle(_ url: URL, title: String) throws {
+        let name = ImportExportService.safeFilename(title)
+        try validateName(name)
+        guard name != url.deletingPathExtension().lastPathComponent else { return }
+        let destination = uniqueURL(name: name, fileExtension: "mindora", folder: url.deletingLastPathComponent())
+        try move(LibraryItem(url: url, isFolder: false, children: []), to: destination)
+    }
+
     func promptRename(_ item: LibraryItem) {
         guard contains(item.url), item.url != rootURL,
               let name = promptName(title: item.isFolder ? "重命名文件夹" : "重命名导图", message: "输入新名称", initial: item.name), name != item.name else { return }

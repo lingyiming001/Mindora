@@ -12,6 +12,42 @@ struct EditorCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.mindoraEditor) private var model
     var body: some Commands {
+        fileCommands
+        CommandMenu("AI") {
+            Button("打开 AI 助手") { WorkspaceStore.shared.showWorkspaceWindow(); openWindow(id: "ai-assistant") }.keyboardShortcut("a", modifiers: [.command, .shift])
+            Button("停止 AI 请求") { AIAssistantStore.shared.stop() }
+        }
+        CommandMenu("插入") {
+            Button("网址链接…") { model?.insertContent(.link) }.keyboardShortcut("k", modifiers: [.command, .option]).disabled(model?.selectedID == nil)
+            Button("代码块…") { model?.insertContent(.code) }.keyboardShortcut("c", modifiers: [.command, .option]).disabled(model?.selectedID == nil)
+        }
+        CommandMenu("主题") {
+            Button("添加子主题") { model?.finishEditing?(); model?.addChild() }.keyboardShortcut("k", modifiers: .command).disabled(model == nil)
+            Button("添加同级主题") { model?.finishEditing?(); model?.addSibling() }.keyboardShortcut("k", modifiers: [.command, .shift]).disabled(model == nil)
+            Button("编辑文字") { model?.request(.editSelection) }.keyboardShortcut("e").disabled(model == nil)
+            Divider()
+            Button("创建主题副本") { model?.duplicateSelection() }.keyboardShortcut("d").disabled(model == nil)
+            Button("展开 / 折叠") { model?.toggleCollapse() }.keyboardShortcut(".").disabled(model == nil)
+            Button("上移") { model?.reorderSelected(by: -1) }.keyboardShortcut(.upArrow, modifiers: [.command, .option]).disabled(model == nil)
+            Button("下移") { model?.reorderSelected(by: 1) }.keyboardShortcut(.downArrow, modifiers: [.command, .option]).disabled(model == nil)
+            Divider()
+            Button("从模板开始…") { model?.showsTemplates = true }.disabled(model == nil)
+        }
+        CommandGroup(after: .textEditing) {
+            Button("搜索主题…") { model?.finishEditing?(); model?.showsOutline = true; model?.sidebarSection = .outline; model?.isSearchPresented = true }.keyboardShortcut("f").disabled(model == nil)
+            Button("命令面板…") { model?.finishEditing?(); model?.showsCommandPalette = true }.keyboardShortcut("p", modifiers: [.command, .shift]).disabled(model == nil)
+        }
+        CommandGroup(after: .toolbar) {
+            Button("适应画布") { model?.finishEditing?(); model?.request(.fit) }.keyboardShortcut("0").disabled(model == nil)
+            Button("定位选中主题") { model?.request(.centerSelection) }.keyboardShortcut("l").disabled(model == nil)
+            Button("显示 / 隐藏侧边栏") { model?.showsOutline.toggle() }.keyboardShortcut("1", modifiers: [.command, .option]).disabled(model == nil)
+            Button("显示 / 隐藏属性") { model?.showsInspector.toggle() }.keyboardShortcut("2", modifiers: [.command, .option]).disabled(model == nil)
+            Button("专注模式") {
+                model?.toggleFocusMode()
+            }.keyboardShortcut("f", modifiers: [.command, .shift]).disabled(model == nil)
+        }
+    }
+    @CommandsBuilder private var fileCommands: some Commands {
         CommandGroup(replacing: .help) {
             Button("键盘快捷键") { openWindow(id: "shortcuts") }.keyboardShortcut("/")
         }
@@ -56,39 +92,6 @@ struct EditorCommands: Commands {
                     Button(format.label + "…") { guard let model else { return }; model.finishEditing?(); ImportExportService.export(model.document, format: format, model: model) }
                 }
             }.disabled(model == nil)
-        }
-        CommandMenu("AI") {
-            Button("打开 AI 助手") { WorkspaceStore.shared.showWorkspaceWindow(); openWindow(id: "ai-assistant") }.keyboardShortcut("a", modifiers: [.command, .shift])
-            Button("停止 AI 请求") { AIAssistantStore.shared.stop() }
-        }
-        CommandMenu("插入") {
-            Button("网址链接…") { model?.insertContent(.link) }.keyboardShortcut("k", modifiers: [.command, .option]).disabled(model?.selectedID == nil)
-            Button("代码块…") { model?.insertContent(.code) }.keyboardShortcut("c", modifiers: [.command, .option]).disabled(model?.selectedID == nil)
-        }
-        CommandMenu("主题") {
-            Button("添加子主题") { model?.finishEditing?(); model?.addChild() }.keyboardShortcut("k", modifiers: .command).disabled(model == nil)
-            Button("添加同级主题") { model?.finishEditing?(); model?.addSibling() }.keyboardShortcut("k", modifiers: [.command, .shift]).disabled(model == nil)
-            Button("编辑文字") { model?.request(.editSelection) }.keyboardShortcut("e").disabled(model == nil)
-            Divider()
-            Button("创建主题副本") { model?.duplicateSelection() }.keyboardShortcut("d").disabled(model == nil)
-            Button("展开 / 折叠") { model?.toggleCollapse() }.keyboardShortcut(".").disabled(model == nil)
-            Button("上移") { model?.reorderSelected(by: -1) }.keyboardShortcut(.upArrow, modifiers: [.command, .option]).disabled(model == nil)
-            Button("下移") { model?.reorderSelected(by: 1) }.keyboardShortcut(.downArrow, modifiers: [.command, .option]).disabled(model == nil)
-            Divider()
-            Button("从模板开始…") { model?.showsTemplates = true }.disabled(model == nil)
-        }
-        CommandGroup(after: .textEditing) {
-            Button("搜索主题…") { model?.finishEditing?(); model?.showsOutline = true; model?.sidebarSection = .outline; model?.isSearchPresented = true }.keyboardShortcut("f").disabled(model == nil)
-            Button("命令面板…") { model?.finishEditing?(); model?.showsCommandPalette = true }.keyboardShortcut("p", modifiers: [.command, .shift]).disabled(model == nil)
-        }
-        CommandGroup(after: .toolbar) {
-            Button("适应画布") { model?.finishEditing?(); model?.request(.fit) }.keyboardShortcut("0").disabled(model == nil)
-            Button("定位选中主题") { model?.request(.centerSelection) }.keyboardShortcut("l").disabled(model == nil)
-            Button("显示 / 隐藏侧边栏") { model?.showsOutline.toggle() }.keyboardShortcut("1", modifiers: [.command, .option]).disabled(model == nil)
-            Button("显示 / 隐藏属性") { model?.showsInspector.toggle() }.keyboardShortcut("2", modifiers: [.command, .option]).disabled(model == nil)
-            Button("专注模式") {
-                model?.toggleFocusMode()
-            }.keyboardShortcut("f", modifiers: [.command, .shift]).disabled(model == nil)
         }
     }
     private func save(asCopy: Bool) {

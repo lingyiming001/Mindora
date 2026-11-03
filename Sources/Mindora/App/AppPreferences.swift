@@ -22,7 +22,7 @@ enum AppPreferences {
         document.theme = MapTheme(rawValue: UserDefaults.standard.string(forKey: "defaultTheme") ?? "") ?? .indigo
         document.layout = MindMapLayout(rawValue: UserDefaults.standard.string(forKey: "defaultLayout") ?? "") ?? .balanced
         func style(_ node: inout MindMapNode, root: Bool) {
-            node.style = NodeStyle(colorHex: node.style?.colorHex, fontSize: min(36, fontSize + (root ? 3 : 0)), textAlignment: .left)
+            node.style = NodeStyle(colorHex: node.style?.colorHex, fontSize: min(36, fontSize + (root ? 3 : 0)), textAlignment: .center)
             for index in node.children.indices { style(&node.children[index], root: false) }
         }
         style(&document.nodes[0], root: true)
@@ -72,18 +72,26 @@ enum BackupRule: String, CaseIterable, Identifiable {
     func chooseFolder() {
         let panel = NSOpenPanel()
         panel.title = "选择备份文件夹"; panel.canChooseDirectories = true
-        panel.canChooseFiles = false; panel.canCreateDirectories = true; panel.directoryURL = folderURL
+        panel.canChooseFiles = false; panel.canCreateDirectories = true; panel.allowsMultipleSelection = false
+        panel.directoryURL = folderURL; panel.prompt = "使用此文件夹"
+        panel.message = "选择存放备份的独立文件夹；可以使用资料库中的子文件夹，但不能使用资料库本身或其上级目录。"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard !LibraryStore.shared.contains(url), !Self.contains(LibraryStore.shared.rootURL, in: url) else {
-            status = "请选择资料库之外的独立文件夹，备份位置不能与资料库重叠。"
+        guard !Self.contains(LibraryStore.shared.rootURL, in: url) else {
+            status = "不能将资料库本身或其上级目录用作备份位置，请选择独立的子文件夹或其他文件夹。"
             return
         }
         do {
-            let bookmark = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
             let accessing = url.startAccessingSecurityScopedResource()
-            scopedURL?.stopAccessingSecurityScopedResource(); scopedURL = accessing ? url : nil
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            let probe = url.appendingPathComponent(".mindora-write-check-" + UUID().uuidString)
+            try Data().write(to: probe, options: .atomic)
+            try FileManager.default.removeItem(at: probe)
+            let bookmark = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+            let retainedAccess = url.startAccessingSecurityScopedResource()
+            scopedURL?.stopAccessingSecurityScopedResource(); scopedURL = retainedAccess ? url : nil
             folderURL = url; lastBackup = [:]
             UserDefaults.standard.set(bookmark, forKey: "backupFolderBookmark")
+            status = "备份位置已更改，后续备份将保存到此处；旧备份保留在原位置。"
             LibraryStore.shared.reload()
         } catch { status = "无法设置备份位置：\(error.localizedDescription)" }
     }

@@ -54,6 +54,7 @@ struct EditorView: View {
         .toolbar { toolbar }
         .focusedSceneValue(\.mindoraEditor, model)
         .onAppear { applyAppearance() }
+        .onDisappear { model.topicSpeech.stop() }
         .onChange(of: model.isSearchPresented) { _, shown in if shown { model.sidebarSection = .outline; searchFocused = true } }
         .sheet(item: $model.contentInsertion) { request in NodeContentEditor(model: model, request: request) }
         .sheet(isPresented: $model.showsTemplates) { TemplatePicker(model: model) }
@@ -110,6 +111,7 @@ struct EditorView: View {
             }
             if model.selectedIDs.count > 1 { Text("· 已选 \(model.selectedIDs.count) 项") }
             Spacer()
+            TopicSpeechStatus(player: model.topicSpeech)
             HStack(spacing: 5) {
                 Circle().fill(workspace.saveStatus == "已保存" ? Color.secondary.opacity(0.5) : model.document.theme.color)
                     .frame(width: 4, height: 4)
@@ -234,6 +236,17 @@ private struct OutlineNodeRow: View {
             if !node.isCollapsed {
                 ForEach(node.children) { child in OutlineNodeRow(node: child, model: model, depth: depth + 1) }
             }
+        }
+    }
+}
+
+private struct TopicSpeechStatus: View {
+    @ObservedObject var player: TopicSpeechPlayer
+
+    var body: some View {
+        if player.activeID != nil {
+            Text(player.isPreparing ? "正在生成语音…" : "正在朗读")
+            QuietIconButton(title: "停止朗读", symbol: "stop.fill") { player.stop() }
         }
     }
 }

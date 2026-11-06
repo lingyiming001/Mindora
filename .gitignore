@@ -15,3 +15,6 @@ Thumbs.db
 /DerivedData/
 /build/
 /deploy/*.zip
+
+# Generated offline speech model
+/Resources/Kokoro/

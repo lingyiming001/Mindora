@@ -21,6 +21,7 @@ def group(directory):
         if path.suffix == '.xcassets':
             key = put('file:' + str(path.relative_to(root)), '{isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = ' + quoted(path.name) + '; sourceTree = "<group>"; }')
             file_ids[path] = key; children.append(key)
+        elif path == root / 'Resources/Kokoro': continue
         elif path.is_dir(): children.append(group(path))
         elif path.suffix in ('.swift', '.plist', '.entitlements', '.icns'):
             filetype = {'.swift': 'sourcecode.swift', '.plist': 'text.plist.xml', '.entitlements': 'text.plist.entitlements', '.icns': 'image.icns'}[path.suffix]
@@ -30,14 +31,19 @@ def group(directory):
 source_group = group(root / 'Sources')
 resource_group = group(root / 'Resources')
 test_group = group(root / 'Tests')
+model_folder = put('file:Resources/Kokoro', '{isa = PBXFileReference; lastKnownFileType = folder; path = Resources/Kokoro; sourceTree = "<group>"; }')
+runtime_package = put('package:kokoro', '{isa = XCLocalSwiftPackageReference; relativePath = Vendor/KokoroRuntime; }')
+runtime_product = put('product:kokoro', '{isa = XCSwiftPackageProductDependency; package = ' + runtime_package + '; productName = MindoraKokoroRuntime; }')
+runtime_build = put('build:kokoro-runtime', '{isa = PBXBuildFile; productRef = ' + runtime_product + '; }')
 product = put('product', '{isa = PBXFileReference; explicitFileType = wrapper.application; path = Mindora.app; sourceTree = BUILT_PRODUCTS_DIR; }')
 products = put('products', '{isa = PBXGroup; children = (' + product + ',); name = Products; sourceTree = "<group>"; }')
-main = put('main', '{isa = PBXGroup; children = ' + array([source_group, resource_group, test_group, products]) + '; sourceTree = "<group>"; }')
+main = put('main', '{isa = PBXGroup; children = ' + array([source_group, resource_group, model_folder, test_group, products]) + '; sourceTree = "<group>"; }')
 source_build_ids = [put('build:' + str(p.relative_to(root)), '{isa = PBXBuildFile; fileRef = ' + file_ids[p] + '; }') for p in source_files]
-resource_build_ids = [put('build:assets', '{isa = PBXBuildFile; fileRef = ' + file_ids[root/'Resources/Assets.xcassets'] + '; }')]
+resource_build_ids = [put('build:assets', '{isa = PBXBuildFile; fileRef = ' + file_ids[root/'Resources/Assets.xcassets'] + '; }'),
+                      put('build:kokoro-model', '{isa = PBXBuildFile; fileRef = ' + model_folder + '; }')]
 sources = put('sources', '{isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ' + array(source_build_ids) + '; runOnlyForDeploymentPostprocessing = 0; }')
 resources = put('resources', '{isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ' + array(resource_build_ids) + '; runOnlyForDeploymentPostprocessing = 0; }')
-frameworks = put('frameworks', '{isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; }')
+frameworks = put('frameworks', '{isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ' + array([runtime_build]) + '; runOnlyForDeploymentPostprocessing = 0; }')
 
 def config(name, settings):
     values = ' '.join(k + ' = ' + quoted(v) + ';' for k,v in settings.items())
@@ -50,8 +56,8 @@ target_debug = config('target:Debug', target_common)
 target_release = config('target:Release', target_common | {'STRIP_INSTALLED_PRODUCT':'YES', 'COPY_PHASE_STRIP':'YES', 'STRIP_SWIFT_SYMBOLS':'YES', 'DEAD_CODE_STRIPPING':'YES'})
 project_configs = put('project-configs', '{isa = XCConfigurationList; buildConfigurations = ' + array([project_debug,project_release]) + '; defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; }')
 target_configs = put('target-configs', '{isa = XCConfigurationList; buildConfigurations = ' + array([target_debug,target_release]) + '; defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; }')
-target = put('target', '{isa = PBXNativeTarget; buildConfigurationList = ' + target_configs + '; buildPhases = ' + array([sources,frameworks,resources]) + '; buildRules = (); dependencies = (); name = Mindora; productName = Mindora; productReference = ' + product + '; productType = "com.apple.product-type.application"; }')
-project_id = put('project', '{isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2710; TargetAttributes = {' + uid('target') + ' = {CreatedOnToolsVersion = 27.1; SystemCapabilities = {com.apple.Sandbox = {enabled = 1; }; com.apple.HardenedRuntime = {enabled = 1; }; }; }; }; }; buildConfigurationList = ' + project_configs + '; compatibilityVersion = "Xcode 14.0"; developmentRegion = "zh-Hans"; hasScannedForEncodings = 0; knownRegions = (en, "zh-Hans", Base); mainGroup = ' + main + '; productRefGroup = ' + products + '; projectDirPath = ""; projectRoot = ""; targets = (' + target + ',); }')
+target = put('target', '{isa = PBXNativeTarget; buildConfigurationList = ' + target_configs + '; buildPhases = ' + array([sources,frameworks,resources]) + '; buildRules = (); dependencies = (); packageProductDependencies = ' + array([runtime_product]) + '; name = Mindora; productName = Mindora; productReference = ' + product + '; productType = "com.apple.product-type.application"; }')
+project_id = put('project', '{isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2710; TargetAttributes = {' + uid('target') + ' = {CreatedOnToolsVersion = 27.1; SystemCapabilities = {com.apple.Sandbox = {enabled = 1; }; com.apple.HardenedRuntime = {enabled = 1; }; }; }; }; }; buildConfigurationList = ' + project_configs + '; compatibilityVersion = "Xcode 14.0"; developmentRegion = "zh-Hans"; hasScannedForEncodings = 0; knownRegions = (en, "zh-Hans", Base); mainGroup = ' + main + '; packageReferences = ' + array([runtime_package]) + '; productRefGroup = ' + products + '; projectDirPath = ""; projectRoot = ""; targets = (' + target + ',); }')
 content = '// !$*UTF8*$!\n{archiveVersion = 1; classes = {}; objectVersion = 56; objects = {\n'
 content += '\n'.join(k + ' = ' + v + ';' for k,v in sorted(objects.items()))
 content += '\n}; rootObject = ' + project_id + '; }\n'

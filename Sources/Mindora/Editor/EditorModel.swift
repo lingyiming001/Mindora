@@ -69,6 +69,16 @@ struct NodeDragSession {
 }
 
 @MainActor final class EditorModel: ObservableObject {
+    let topicSpeech = TopicSpeechPlayer()
+
+    func toggleTopicSpeech(_ node: MindMapNode) {
+        if topicSpeech.activeID == node.id {
+            topicSpeech.stop()
+        } else {
+            topicSpeech.start(node) { [weak self] in self?.errorMessage = $0 }
+        }
+    }
+
     @Published private(set) var document: MindMapDocument { didSet { if !isResizePreview { documentDidChange?(document) } } }
     @Published private(set) var layoutResult: LayoutResult
     @Published private(set) var selectedIDs: Set<UUID>

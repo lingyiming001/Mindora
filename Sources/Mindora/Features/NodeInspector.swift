@@ -48,6 +48,7 @@ struct NodeInspector: View {
                         switch tab {
                         case .content:
                             titleEditor(node)
+                            TopicSpeechButton(model: model, player: model.topicSpeech, node: node)
                             NodeRichContent(model: model, nodeID: node.id)
                             content(node)
                         case .style: style(node)
@@ -402,5 +403,20 @@ private struct LayoutMiniature: View {
                 context.fill(Path(roundedRect: CGRect(x: center.x - 9, y: center.y - 4, width: 18, height: 8), cornerRadius: 3), with: .color(index == 0 ? tint : tint.opacity(0.25)))
             }
         }.accessibilityHidden(true)
+    }
+}
+
+private struct TopicSpeechButton: View {
+    let model: EditorModel
+    @ObservedObject var player: TopicSpeechPlayer
+    let node: MindMapNode
+
+    var body: some View {
+        let isActive = player.activeID == node.id
+        Button(isActive ? "停止朗读" : "朗读主题", systemImage: isActive ? "stop.fill" : "speaker.wave.2") {
+            model.toggleTopicSpeech(node)
+        }
+        .disabled(!isActive && !TopicSpeechPlayer.canRead(node))
+        .help("朗读主题文字和备注")
     }
 }

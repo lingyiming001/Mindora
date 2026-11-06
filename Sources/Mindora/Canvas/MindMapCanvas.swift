@@ -418,7 +418,8 @@ struct MindMapCanvas: NSViewRepresentable {
     }
     override func menu(for event: NSEvent) -> NSMenu? {
         endEditing(commit: true)
-        if let id = node(at: convert(event.locationInWindow, from: nil)), !model.selectedIDs.contains(id) { model.select(id) }
+        let clickedID = node(at: convert(event.locationInWindow, from: nil))
+        if let clickedID, !model.selectedIDs.contains(clickedID) { model.select(clickedID) }
         let menu = NSMenu()
         let items: [(String, Selector)] = [
             ("编辑文字    ⌘E / F2", #selector(editNode)), ("添加子主题    Tab / ⌘K", #selector(addChild)), ("添加同级主题    ⇧⌘K", #selector(addSibling)),
@@ -427,7 +428,19 @@ struct MindMapCanvas: NSViewRepresentable {
             ("创建副本    ⌘D", #selector(duplicateNodes)), ("上移    ⌥⌘↑", #selector(reorderNodeUp)), ("下移    ⌥⌘↓", #selector(reorderNodeDown)), ("删除主题    Delete", #selector(deleteNodes))
         ]
         for (title, action) in items { let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; menu.addItem(item) }
+        if let clickedID, let node = model.document.root.find(clickedID),
+           TopicSpeechPlayer.canRead(node) || model.topicSpeech.activeID == clickedID {
+            let title = model.topicSpeech.activeID == clickedID ? "停止朗读" : "朗读主题"
+            let item = NSMenuItem(title: title, action: #selector(readTopic(_:)), keyEquivalent: "")
+            item.representedObject = clickedID
+            item.target = self
+            menu.insertItem(item, at: 1)
+        }
         return menu
+    }
+    @objc private func readTopic(_ item: NSMenuItem) {
+        guard let id = item.representedObject as? UUID, let node = model.document.root.find(id) else { return }
+        model.toggleTopicSpeech(node)
     }
     @objc func copy(_ sender: Any?) { model.copySelection() }
     @objc func cut(_ sender: Any?) { model.cutSelection() }

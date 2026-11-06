@@ -4,7 +4,7 @@
 
 ## 启动
 
-用 Xcode 打开 `Mindora.xcodeproj`，选择 `Mindora` scheme 运行。启动直接显示资料库和文件夹内容；新建或打开导图在当前窗口进入编辑器，左上角“返回资料库”可回到文件夹。
+首次用 Xcode 构建前，在项目根目录运行 `python3 scripts/prepare-kokoro.py` 准备离线语音模型。用 Xcode 打开 `Mindora.xcodeproj`，选择 `Mindora` scheme 运行。启动直接显示资料库和文件夹内容；新建或打开导图在当前窗口进入编辑器，左上角“返回资料库”可回到文件夹。
 
 Xcode 中选择 **Mindora target → Signing & Capabilities** 配置开发团队及权限，按 ⌘R 构建运行；发布可用 Product → Archive。版本号和构建号在 General 中管理，图标位于 `Resources/Assets.xcassets/AppIcon.appiconset`，文档类型位于 `Resources/Info.plist`。
 
@@ -18,6 +18,8 @@ App 默认启用 Sandbox、用户选择文件读写、应用范围文件书签�
 
 如果旧版应用仍在运行，先用 ⌘Q 退出，再运行脚本，以加载新代码。脚本使用已纳入版本管理的工程构建本地 App、进行 ad hoc 签名并启动；默认 Release 产物位于 `.build/xcode/Build/Products/Release/Mindora.app`。脚本构建保留无沙盒的本地开发方式；验证正式 App 权限请使用 Xcode 构建运行。`Package.swift` 保留作为命令行开发与单元测试入口。
 
+构建和打包脚本会自动下载并校验 Kokoro 1.1 模型，随后将其打入 App。首次构建需要联网，模型解压后约 420 MiB，运行时可离线朗读。[Kokoro 模型说明](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html)
+
 ## 编辑功能
 
 - 多级主题、新增子/同级主题、双击或 ⌘E 就地编辑，Shift+Return 换行。
@@ -26,6 +28,7 @@ App 默认启用 Sandbox、用户选择文件读写、应用范围文件书签�
 - 左右平衡、向右树形、向左树形、组织结构四种布局；动态文字测量。
 - 原生 AppKit 画布、指针锚点缩放、平移、适应窗口、可视范围裁剪。
 - 大纲、主题/备注/标签搜索、命令面板、专注模式。
+- 在画布右键菜单或主题属性的“内容”页选择“朗读主题”，可朗读主题文字和备注，支持中文、英文及混读。状态栏可停止朗读。
 - 备注、标签、优先级、进度、节点颜色/字号和四套主题；系统深浅色外观。
 - 十个模板（含系统设计、API 设计、Bug 排查、代码评审、发布检查），Markdown/OPML/JSON 导入，Markdown/OPML/JSON/PNG/JPEG/SVG/PDF 导出。
 

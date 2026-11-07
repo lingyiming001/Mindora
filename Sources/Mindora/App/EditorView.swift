@@ -54,6 +54,9 @@ struct EditorView: View {
         .toolbar { toolbar }
         .focusedSceneValue(\.mindoraEditor, model)
         .onAppear { applyAppearance() }
+        .task(id: ObjectIdentifier(model), priority: .utility) {
+            await model.topicSpeech.prepare()
+        }
         .onDisappear { model.topicSpeech.stop() }
         .onChange(of: model.isSearchPresented) { _, shown in if shown { model.sidebarSection = .outline; searchFocused = true } }
         .sheet(item: $model.contentInsertion) { request in NodeContentEditor(model: model, request: request) }

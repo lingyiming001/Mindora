@@ -9,6 +9,9 @@ final class TopicSpeechPlayer: ObservableObject {
 
     private var session = UUID()
     private var synthesis: Task<Void, Never>?
+    private var remaining: ArraySlice<String> = []
+    private var queuedBuffers = 0
+    private static let modelRoot = (Bundle.main.resourceURL ?? Bundle.main.bundleURL).appendingPathComponent("Kokoro")
     private var engine: AVAudioEngine?
     private var output: AVAudioPlayerNode?
 
@@ -16,19 +19,26 @@ final class TopicSpeechPlayer: ObservableObject {
         node.title.contains(where: \.isLetterOrNumber) || node.note.contains(where: \.isLetterOrNumber)
     }
 
+    func prepare() async {
+        try? await KokoroEngine.shared.prepare(root: Self.modelRoot)
+    }
+
     func start(_ node: MindMapNode, onError: @escaping (String) -> Void) {
         stop()
-        let chunks = [node.title, node.note].flatMap(Self.chunks)
-        guard !chunks.isEmpty else { return }
-        let root = (Bundle.main.resourceURL ?? Bundle.main.bundleURL).appendingPathComponent("Kokoro")
+        let title = Self.chunks(node.title)
+        let note = Self.chunks(node.note)
+        remaining = (title + note)[...]
+        guard !remaining.isEmpty else { return }
         activeID = node.id
-        play(chunks[...], root: root, session: session, onError: onError)
+        fillQueue(session: session, onError: onError)
     }
 
     func stop() {
         session = UUID()
         synthesis?.cancel()
         synthesis = nil
+        remaining = []
+        queuedBuffers = 0
         output?.stop()
         engine?.stop()
         output = nil
@@ -37,21 +47,29 @@ final class TopicSpeechPlayer: ObservableObject {
         isPreparing = false
     }
 
-    private func play(_ chunks: ArraySlice<String>, root: URL, session: UUID, onError: @escaping (String) -> Void) {
-        guard let text = chunks.first else { stop(); return }
-        isPreparing = true
+    // Keep one buffer ahead of playback so inference overlaps the current audio.
+    private func fillQueue(session: UUID, onError: @escaping (String) -> Void) {
+        if queuedBuffers == 0 && remaining.isEmpty && synthesis == nil {
+            stop()
+            return
+        }
+        isPreparing = queuedBuffers == 0
+        guard queuedBuffers < 2, synthesis == nil, let text = remaining.popFirst() else { return }
         synthesis = Task { [weak self] in
             do {
                 let speaker: Int32 = text.unicodeScalars.contains { $0.properties.isIdeographic } ? 56 : 0
-                let audio = try await KokoroEngine.shared.render(text, speaker: speaker, root: root)
+                let audio = try await KokoroEngine.shared.render(text, speaker: speaker, root: Self.modelRoot)
                 guard let self, self.session == session else { return }
                 try self.play(audio) { [weak self] in
                     Task { @MainActor in
                         guard let self, self.session == session else { return }
-                        self.play(chunks.dropFirst(), root: root, session: session, onError: onError)
+                        self.queuedBuffers -= 1
+                        self.fillQueue(session: session, onError: onError)
                     }
                 }
-                self.isPreparing = false
+                self.queuedBuffers += 1
+                self.synthesis = nil
+                self.fillQueue(session: session, onError: onError)
             } catch {
                 guard let self, self.session == session else { return }
                 self.stop()
@@ -83,18 +101,27 @@ final class TopicSpeechPlayer: ObservableObject {
     }
 
     static func chunks(_ text: String) -> [String] {
-        let punctuation: Set<Character> = ["。", "！", "？", "；", ".", "!", "?", ";", "\n"]
-        var remaining = text[...]
+        let sentenceEnds: Set<Character> = ["。", "！", "？", "；", "\n"]
+        let spacedEnds: Set<Character> = [".", "!", "?", ";"]
+        var remaining = text.trimmingCharacters(in: .whitespacesAndNewlines)[...]
         var chunks: [String] = []
         while !remaining.isEmpty {
-            let prefix = remaining.prefix(160)
-            var end = prefix.endIndex
-            if end != remaining.endIndex {
-                let latterHalf = prefix.dropFirst(80)
-                if let boundary = latterHalf.lastIndex(where: { punctuation.contains($0) })
-                    ?? latterHalf.lastIndex(where: \.isWhitespace) {
-                    end = prefix.index(after: boundary)
-                }
+            let limit = 48
+            let prefix = remaining.prefix(limit)
+            let sentenceEnd = prefix.indices.first { index in
+                let character = prefix[index]
+                let next = remaining.index(after: index)
+                return sentenceEnds.contains(character)
+                    || (spacedEnds.contains(character) && (next == remaining.endIndex || remaining[next].isWhitespace))
+            }
+            let end: String.Index
+            if let boundary = sentenceEnd {
+                end = prefix.index(after: boundary)
+            } else if prefix.endIndex != remaining.endIndex,
+                      let boundary = prefix.dropFirst(limit / 2).lastIndex(where: { $0.isWhitespace || $0 == "，" || $0 == "," }) {
+                end = prefix.index(after: boundary)
+            } else {
+                end = prefix.endIndex
             }
             let chunk = remaining[..<end].trimmingCharacters(in: .whitespacesAndNewlines)
             if chunk.contains(where: \.isLetterOrNumber) { chunks.append(chunk) }

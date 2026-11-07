@@ -32,22 +32,18 @@ public actor KokoroEngine {
     private var loadedRoot: URL?
     private var idleRelease: Task<Void, Never>?
 
+    public func prepare(root: URL) throws {
+        try Task.checkCancellation()
+        idleRelease?.cancel()
+        defer { scheduleIdleRelease() }
+        _ = try loadIfNeeded(root)
+    }
+
     public func render(_ text: String, speaker: Int32, root: URL) throws -> KokoroAudio {
         try Task.checkCancellation()
         idleRelease?.cancel()
-        defer {
-            idleRelease = Task { [weak self] in
-                do { try await Task.sleep(for: .seconds(60)) } catch { return }
-                await self?.unload()
-            }
-        }
-
-        if handle == nil || loadedRoot != root {
-            unload()
-            handle = try load(root)
-            loadedRoot = root
-        }
-        guard let handle else { throw KokoroError.initialization }
+        defer { scheduleIdleRelease() }
+        let handle = try loadIfNeeded(root)
         try Task.checkCancellation()
 
         var config = SherpaOnnxGenerationConfig()
@@ -65,6 +61,22 @@ public actor KokoroEngine {
         let values = Array(UnsafeBufferPointer(start: samples, count: Int(result.n)))
         guard values.allSatisfy(\.isFinite), values.contains(where: { abs($0) > 0.00001 }) else { throw KokoroError.synthesis }
         return KokoroAudio(samples: values, sampleRate: Int(result.sample_rate))
+    }
+
+    private func loadIfNeeded(_ root: URL) throws -> Handle {
+        if let handle, loadedRoot == root { return handle }
+        unload()
+        let handle = try load(root)
+        self.handle = handle
+        loadedRoot = root
+        return handle
+    }
+
+    private func scheduleIdleRelease() {
+        idleRelease = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(300)) } catch { return }
+            await self?.unload()
+        }
     }
 
     private func unload() {
